@@ -12,7 +12,7 @@
       "platform": "all",
       "os_min_version": "0.9.27",
       "os_max_version": "0.9.100",
-      "install_type": "",
+      "install_type": "docker",
       "ctl_stop": true,
       "checkport": true,
       "service_port": 8080,
