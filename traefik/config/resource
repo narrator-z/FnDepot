@@ -1,0 +1,30 @@
+{
+    "docker-project": {
+        "projects": [
+            {
+                "name": "traefik",
+                "path": "docker"
+            }
+        ]
+    },
+    "data-share": {
+        "shares": [
+            {
+                "name": "traefik",
+                "permission": {
+                    "rw": [
+                        "traefik"
+                    ]
+                }
+            },
+            {
+                "name": "traefik/data",
+                "permission": {
+                    "rw": [
+                        "traefik"
+                    ]
+                }
+            }
+        ]
+    }
+}

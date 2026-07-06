@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - web
+    ports:
+      - "${TRIM_SERVICE_PORT}:8080"  # Web UI
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "${TRIM_PKGVAR}/traefik.yaml:/etc/traefik/traefik.yaml:ro"
+      - "${TRIM_PKGVAR}/acme.json:/etc/traefik/acme.json"
+      - "${TRIM_DATA_SHARE_PATHS}:/data" # Mount shared data path
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`traefik.yourdomain.com`)"
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=user:$$apr1$$Xy9G0hIe$$D1m7.g3D1J2G.x0Y0J.2M0" # user:password
+      - "traefik.http.routers.dashboard.rule=Host(`dashboard.yourdomain.com`)"
+      - "traefik.http.routers.dashboard.service=dashboard@internal"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+
+networks:
+  web:
+    external: true

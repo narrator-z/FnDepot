@@ -1,0 +1,22 @@
+# traefik.yaml - Dynamic configuration file
+# This file is mounted into the container at /etc/traefik/traefik.yaml
+# You can modify this file to define routers, services, middlewares, etc.
+# For more information: https://doc.traefik.io/traefik/providers/file/
+
+# Example: Define a simple router for a service running on port 8080 in Docker
+# http:
+#   routers:
+#     my-service:
+#       rule: Host(`example.com`)
+#       service: my-service
+#       entryPoints:
+#         - websecure
+#       tls:
+#         certResolver: myresolver
+#   services:
+#     my-service:
+#       loadBalancer:
+#         servers:
+#           - url: http://my-service:8080
+
+# Currently empty; configure as needed.
