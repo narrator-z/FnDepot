@@ -1,32 +1,198 @@
-# 反代「飞牛本机 / 局域网其他设备」上运行的服务
-# 关键：Traefik 运行在 bridge 网络，访问飞牛本机需用 host.docker.internal（compose 已配置 host-gateway）
-# 需要反代其它 Docker 容器时，让其加入 traefik 网络（见 README）。
+# 反代「飞牛本机 / 局域网设备 / 其它 FnOS 应用容器」的服务目录（通用版）
+# 参考：ref/traefik-proxy/config/dynamic/external-service.yml（已去个性化，改为可勾选模板）
+#
+# ── 后端地址怎么填（三种场景）──
+#   ① 飞牛本机服务（原生应用 / 宿主机端口）  →  http://host.docker.internal:端口
+#   ② 其它 FnOS 应用容器（同 trim-default 网络）→ http://容器名:端口   （Traefik 经 Docker DNS 解析）
+#   ③ 局域网其它设备                          →  http://内网IP:端口
+#
+# ── 启用方法 ──
+#   复制下方「模板」或你需要的服务块，取消注释，把 Host 改成你的域名、端口改成实际端口即可。
+#   默认全部注释，开箱即用、不会因指向不存在的服务而报错。
+
 http:
   routers:
-    # ===== 示例：反代飞牛本机监听 18080 的 Web 服务 =====
-    myservice:
-      rule: "Host(`svc.你的域名.com`)"
-      entryPoints:
-        - websecure
-      service: myservice
-      # middlewares:
-      #   - secure-headers@file
-  services:
-    myservice:
-      loadBalancer:
-        servers:
-          - url: "http://host.docker.internal:18080"
-        passHostHeader: true
+    # ===== 模板（复制后修改）=====
+    # myservice:
+    #   rule: "Host(`svc.your-domain.example`)"
+    #   entryPoints:
+    #     - websecure
+    #   service: myservice
+    #   # 可选中间件（按需取消对应注释）：
+    #   # middlewares:
+    #   #   - secure-headers@file   # 需要被 iframe 内嵌 / 注入 CSP 头
+    #   #   - basic-auth@file       # 需要 BasicAuth 密码保护
+    #   #   - fix-host@file         # 后端校验 Host（见 middlewares.yml）
+    #   # tls: {}                   # 用自签证书（websecure 已默认启用，可不写）
 
-  # ===== 示例：反代同一 traefik 网络中的其它 Docker 容器 =====
-  # othercontainer:
-  #   rule: "Host(`app.你的域名.com`)"
-  #   entryPoints:
-  #     - websecure
-  #   service: othercontainer
-  # services:
-  #   othercontainer:
-  #     loadBalancer:
-  #       servers:
-  #         - url: "http://othercontainer:8080"
-  #       passHostHeader: true
+    # ===== 智能家居 / IoT =====
+    # homeassistant:
+    #   rule: "Host(`ha.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: homeassistant
+    # homebridge:
+    #   rule: "Host(`hb.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: homebridge
+    # nodered:
+    #   rule: "Host(`nr.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: nodered
+    # esphome:
+    #   rule: "Host(`esp.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: esphome
+
+    # ===== 影音媒体 =====
+    # emby:
+    #   rule: "Host(`tv.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: emby
+    # jellyfin:
+    #   rule: "Host(`jf.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: jellyfin
+    # plex:
+    #   rule: "Host(`px.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: plex
+    # navidrome:
+    #   rule: "Host(`music.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: navidrome
+    # alist:
+    #   rule: "Host(`alist.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: alist
+
+    # ===== 下载 / 文件 =====
+    # qinglong:
+    #   rule: "Host(`ql.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: qinglong
+    # aria2:
+    #   rule: "Host(`aria2.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: aria2
+    # webdav:
+    #   rule: "Host(`dav.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: webdav
+    # nextcloud:
+    #   rule: "Host(`nc.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: nextcloud
+    # calibre:
+    #   rule: "Host(`book.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: calibre
+
+    # ===== 开发 / 运维工具 =====
+    # gitea:
+    #   rule: "Host(`git.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: gitea
+    #   middlewares:
+    #     - fix-host@file          # Gitea 需要固定 Host
+    # vaultwarden:
+    #   rule: "Host(`key.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: vaultwarden
+    # portainer:
+    #   rule: "Host(`port.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: portainer
+    # uptimekuma:
+    #   rule: "Host(`uptime.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: uptimekuma
+    # grafana:
+    #   rule: "Host(`graf.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: grafana
+    # prometheus:
+    #   rule: "Host(`prom.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: prometheus
+    # adguard:
+    #   rule: "Host(`adg.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: adguard
+
+    # ===== 测试用（配合 whoami 容器验证反代）=====
+    # whoami:
+    #   rule: "Host(`whoami.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: whoami
+
+  services:
+    # ===== 模板 =====
+    # myservice:
+    #   loadBalancer:
+    #     servers:
+    #       - url: "http://host.docker.internal:18080"   # ① 飞牛本机服务
+    #     passHostHeader: true
+
+    # ===== 智能家居 / IoT（端口为各服务默认，请按需调整）=====
+    # homeassistant:
+    #   loadBalancer:
+    #     servers: [{ url: "http://host.docker.internal:8123" }]   # 或 http://homeassistant:8123
+    #     passHostHeader: true
+    # homebridge:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8581" }], passHostHeader: true }
+    # nodered:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:1880" }], passHostHeader: true }
+    # esphome:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:6052" }], passHostHeader: true }
+
+    # ===== 影音媒体 =====
+    # emby:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8096" }], passHostHeader: true }
+    # jellyfin:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8096" }], passHostHeader: true }
+    # plex:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:32400" }], passHostHeader: true }
+    # navidrome:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:4533" }], passHostHeader: true }
+    # alist:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:5244" }], passHostHeader: true }
+
+    # ===== 下载 / 文件 =====
+    # qinglong:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:5700" }], passHostHeader: true }
+    # aria2:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:6880" }], passHostHeader: true }
+    # webdav:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:5005" }], passHostHeader: true }
+    # nextcloud:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:80" }], passHostHeader: true }
+    # calibre:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8083" }], passHostHeader: true }
+
+    # ===== 开发 / 运维工具 =====
+    # gitea:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:3000" }], passHostHeader: true }
+    # vaultwarden:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:80" }], passHostHeader: true }
+    # portainer:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:9000" }], passHostHeader: true }
+    # uptimekuma:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:3001" }], passHostHeader: true }
+    # grafana:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:3000" }], passHostHeader: true }
+    # prometheus:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:9090" }], passHostHeader: true }
+    # adguard:
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:3000" }], passHostHeader: true }
+
+    # ===== 测试用 =====
+    # whoami:
+    #   loadBalancer: { servers: [{ url: "http://whoami:80" }], passHostHeader: true }   # 配合 whoami 容器
+
+  # ── serversTransports：连接后端时跳过 TLS 校验（后端用自签证书时）──
+  # 在 service 中通过 `serversTransport: insecure-skip` 引用。
+  serversTransports:
+    insecure-skip:
+      insecureSkipVerify: true
+    # pve-transport:
+    #   insecureSkipVerify: true      # 例：反代 PVE 管理页

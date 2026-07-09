@@ -1,8 +1,9 @@
-# Traefik 静态配置（飞牛优化版）
+# Traefik 静态配置（飞牛通用优化版）
 # 参考：ref/traefik-proxy/config/traefik/traefik.yml
+# 说明：已去除个性化域名/证书路径，全部改为通用占位与注释。
 
 global:
-  checkNewVersion: false      # 关闭版本检查（内网环境无需）
+  checkNewVersion: false      # 内网环境无需检查更新
   sendAnonymousUsage: false   # 关闭匿名用量上报
 
 api:
@@ -16,33 +17,41 @@ entryPoints:
   websecure:
     address: ":50443"
     forwardedHeaders:
-      # 信任以下网段的 X-Forwarded-*，确保后端服务拿到真实客户端 IP
+      # 信任以下网段的 X-Forwarded-*，使后端服务拿到真实客户端 IP。
+      # 若你的服务位于上方网段之外（例如有公网反代层），请在此追加对应 IP/段。
       trustedIPs:
         - "127.0.0.1/32"
         - "::1/128"
-        - "192.168.0.0/16"
         - "10.0.0.0/8"
         - "172.16.0.0/12"
-        - "172.18.0.0/16"
-        - "172.19.0.0/16"
+        - "192.168.0.0/16"
         - "fd00::/8"      # IPv6 唯一本地地址
         - "fe80::/10"     # IPv6 链路本地地址
     http:
       middlewares:
         - "secure-headers@file"   # 注入 iframe/CSP 头，飞牛桌面内嵌必需
-      tls: {}                      # 默认自签证书，开箱即用；如需自有证书见 dynamic/middlewares.yml 的 TLS Store
+      tls: {}                      # 默认自签证书，开箱即用；自有证书见 dynamic/middlewares.yml 的 TLS Store
 
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false        # 仅代理显式打 traefik.enable=true 标签的容器
-    network: traefik               # 与 compose 中定义的网络一致
+    network: trim-default          # 自动发现接入飞牛默认网络的其它应用
   file:
     directory: "/etc/traefik/dynamic"
-    watch: true                    # 热加载动态配置（新增反代无需重启）
+    watch: true                    # 热加载动态配置（新增反代无需重启 Traefik）
 
 log:
   level: INFO
   filePath: "/data/traefik.log"    # 日志写入飞牛共享目录 traefik/data
 
 accessLog: true
+
+# ── 可选：本地插件（真实客户端 IP 转换 XFF→X-Real-IP） ──
+# 需同时满足：① compose 中挂载插件目录（- ${TRIM_PKGVAR}/plugins:/plugins-local/src）
+#            ② traefik 镜像内含 Go 构建环境（官方 traefik:latest 不含，需自行构建镜像）
+# 默认不启用，避免启动失败；启用后可在 dynamic/middlewares.yml 中启用 xff2realip 中间件。
+# experimental:
+#   localPlugins:
+#     traefik-xff-to-xrealip:
+#       moduleName: github.com/jeppestaerk/traefik-xff-to-xrealip

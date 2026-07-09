@@ -1,12 +1,16 @@
-# 动态中间件配置（被静态配置中的 secure-headers@file / basic-auth@file 引用）
+# 动态中间件与 TLS 配置
+# 被静态配置中的 secure-headers@file / basic-auth@file 引用；
+# 其余中间件（redirect / fix-host / xff2realip）默认注释，按需启用。
+
 http:
   middlewares:
-    # 安全响应头：允许被飞牛桌面以 iframe 内嵌（frame-ancestors *），并关闭会阻断内嵌的帧策略
+    # ── 安全响应头：允许被飞牛桌面以 iframe 内嵌 ──
+    # frameDeny 必须关闭、customFrameOptionsValue 必须清空，否则 iframe 被拦截。
     secure-headers:
       headers:
-        sslRedirect: false
-        frameDeny: false            # ❌ 必须关闭，否则所有 iframe 被拦截
-        customFrameOptionsValue: "" # ❌ 必须清空，否则强制 SAMEORIGIN
+        sslRedirect: false             # 不强制跳转，保留 50080(LAN HTTP) 入口；如需 50080→50443 见 redirect-to-https
+        frameDeny: false               # ❌ 必须关闭，否则所有 iframe 被拦截（飞牛桌面内嵌必需）
+        customFrameOptionsValue: ""    # ❌ 必须清空，否则强制 SAMEORIGIN
         contentTypeNosniff: true
         browserXssFilter: true
         customResponseHeaders:
@@ -14,17 +18,42 @@ http:
         sslProxyHeaders:
           X-Forwarded-Proto: "https"
 
-    # Dashboard 远程访问（50443）基础认证，请替换为你自己的哈希
-    # 生成方式：htpasswd -nbB 用户名 密码
+    # ── Dashboard 远程访问（50443）基础认证：务必替换为你自己的哈希 ──
+    # 生成方式：htpasswd -nbB 用户名 密码   （需安装 apache2-utils / httpd-tools）
     basic-auth:
       basicAuth:
         users:
-          - "admin:$2y$05$6W8GpX4z1kLQZ3q7vYw8eO4K9mN2pQrS1tUvWxYzA0bC1dE2fG3hI4jK5l"  # admin / 请修改
+          - "admin:$2y$05$REPLACE_WITH_YOUR_htpasswd_OUTPUT"   # admin / 请修改
 
-  # 可选：自有证书。将证书放到数据目录后取消注释并在 websecure 引用
-  # tls:
-  #   stores:
-  #     default:
-  #       defaultCertificate:
-  #         certFile: "/data/your-domain.crt"
-  #         keyFile:  "/data/your-domain.key"
+    # ── 可选：HTTP 50080 → HTTPS 50443 全量跳转 ──
+    # 启用后，所有 50080 明文访问将被 301 跳转到 50443；如保留 LAN 明文入口请勿启用。
+    # redirect-to-https:
+    #   redirectScheme:
+    #     scheme: https
+    #     port: "50443"
+    #     permanent: true
+
+    # ── 可选：修正后端 Host 头 ──
+    # 部分应用（如 Gitea）校验 Host，需用固定域名访问后端，否则返回 404/异常。
+    # fix-host:
+    #   headers:
+    #     customRequestHeaders:
+    #       Host: "git.your-domain.example:50443"
+
+    # ── 可选：真实客户端 IP（XFF→X-Real-IP） ──
+    # 依赖本地插件 traefik-xff-to-xrealip（见 traefik.yaml 顶部说明），默认不启用。
+    # xff2realip:
+    #   plugin:
+    #     traefik-xff-to-xrealip:
+    #       trustForwardHeader: true
+    #       depth: 1
+
+# ── 可选：自有 TLS 证书 ──
+# 默认使用 Traefik 自签证书。将证书(crt/key)放入数据目录 certificates/ 后取消注释，
+# 并确认文件名正确；证书会自动作为默认证书对所有 50443 域名生效。
+# tls:
+#   stores:
+#     default:
+#       defaultCertificate:
+#         certFile: "/certificates/your-domain.crt"
+#         keyFile:  "/certificates/your-domain.key"

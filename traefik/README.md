@@ -1,25 +1,31 @@
 # Traefik 反向代理
 
-轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。本应用针对 **FNOS（飞牛）** 做了专门适配，以 Docker 容器方式部署，开箱即用，适合在家庭或私有网络中统一管理多条服务的入口流量与 TLS。
+轻量级、高性能的开源反向代理与负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现与路由。本应用针对 **FNOS（飞牛）** 做了专门适配，开箱即用，适合在家庭或私有网络中统一管理多条服务的入口流量与 TLS。
+
+> 设计参考成熟的飞牛 Traefik 部署（`ref/traefik-proxy`），已覆盖其全部功能点，并去除个性化配置（域名 / 证书路径 / 公网 IP 等），改为可勾选的通用模板，适配任意飞牛用户。
 
 ## 特性
 
 - **飞牛端口避让**：入口使用 `50080` / `50443`，避开飞牛系统占用的 `80` / `443`，避免端口冲突导致无法启动。
-- **自动化服务发现**：对接 Docker provider，仅代理显式打标签的容器，启停后自动更新路由。
-- **内置 Dashboard**：可视化控制面板，飞牛桌面经 `8080` 端口内网直连访问。
-- **默认 HTTPS**：`websecure` 入口启用默认自签证书，开箱即用；可替换为自有证书（见下文）。
-- **真实客户端 IP**：信任 Docker / 内网网段的 `X-Forwarded-*`，后端能拿到真实来源。
+- **跨应用自动发现**：Traefik 接入飞牛默认应用网络 `trim-default`，自动发现**其它 FnOS 应用容器**并直接以容器名反代（无需手动写 IP）。
+- **自动化服务发现**：对接 Docker provider，仅代理显式打 `traefik.enable=true` 标签的容器，启停后自动更新路由。
+- **内置 Dashboard**：可视化控制面板，飞牛桌面经 `8080` 端口内网直连访问；亦支持经 `50443` + BasicAuth 远程访问。
+- **默认 HTTPS**：`websecure` 入口启用默认自签证书，开箱即用；可替换为自有证书。
+- **真实客户端 IP**：信任 Docker / 内网网段的 `X-Forwarded-*`，后端能拿到真实来源（进阶见「真实客户端 IP」）。
 - **桌面内嵌支持**：注入 `frame-ancestors *` 等安全头，确保可被飞牛桌面以 iframe 正常内嵌。
+- **通用服务目录**：内置 20+ 常见自建服务（Home Assistant / Emby / Gitea / AList / Vaultwarden 等）的可勾选反代模板。
+- **进阶能力（可选）**：自定义 Host 头、HTTP→HTTPS 跳转、自有 TLS 证书、跳过后端证书校验、本地插件转换真实 IP。
 
 ## 文件结构
 
 ```
 traefik/app/docker/
 ├── docker-compose.yaml        # 容器编排（端口、挂载、网络）
-├── traefik.yaml               # 静态配置（入口/API/Provider/日志）
+├── traefik.yaml               # 静态配置（入口 / API / Provider / 日志 / 可选插件）
 └── dynamic/
-    ├── middlewares.yml        # secure-headers（内嵌头）、basic-auth、TLS Store 模板
-    └── external-service.yml   # 反代飞牛本机/局域网服务的示例（默认注释）
+    ├── middlewares.yml        # secure-headers（内嵌头）、basic-auth、可选中间件与 TLS Store
+    ├── dashboard.yml          # 远程 Dashboard 路由（50443 + BasicAuth）
+    └── external-service.yml   # 反代「本机 / 局域网 / 其它应用」的通用服务目录（默认注释）
 ```
 
 ## 端口
@@ -30,38 +36,45 @@ traefik/app/docker/
 | 50080 | 50080 | HTTP 入口（web，避开系统 80） |
 | 50443 | 50443 | HTTPS 入口（websecure，避开系统 443） |
 
-> 飞牛系统默认占用 `80` / `443`，因此本应用不再绑定这两个端口。如需对外暴露标准 80/443，请在飞牛的「lucky」等系统反代中做一层转发，或自行修改 `traefik.yaml` 的 entryPoints。
+> 飞牛系统默认占用 `80` / `443`，因此本应用不再绑定这两个端口。对外暴露标准 80/443 时，可在飞牛的 lucky 等系统反代中做一层转发，或自行修改 `traefik.yaml` 的 entryPoints。
 
 ## 快速使用
 
 1. 在飞牛应用中心安装并启动本应用。
 2. 打开飞牛桌面中的 Traefik，即可访问 Dashboard（端口 8080）。
-3. 通过 `https://<飞牛IP>:50443` 访问被代理的服务（默认自签证书，浏览器会提示不安全，属正常现象）。
+3. 通过 `https://<飞牛IP>:50443` 访问被代理的服务（默认自签证书，浏览器提示不安全属正常现象）。
 
 ## 配置
 
-### 反代 Docker 容器
+### 反代其它 FnOS 应用容器（自动发现）
 
-在**其它** compose 服务中加入 `traefik` 网络并打标签即可被自动发现：
+Traefik 已接入飞牛默认网络 `trim-default`。只要在**其它**应用的容器上打标签，即可被自动发现，无需手写 IP：
 
 ```yaml
 services:
   myapp:
     image: myapp:latest
     networks:
-      - traefik
+      - trim-default          # 接入飞牛默认应用网络（external）
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.myapp.rule=Host(`app.你的域名.com`)"
       - "traefik.http.routers.myapp.entrypoints=websecure"
 networks:
-  traefik:
+  trim-default:
     external: true
+    name: trim-default
 ```
 
 ### 反代飞牛本机 / 局域网服务
 
-编辑 `dynamic/external-service.yml`，使用 `host.docker.internal` 指向飞牛本机端口（compose 已配置 `host.docker.internal:host-gateway`）：
+编辑 `dynamic/external-service.yml`，按后端所在位置选择地址（三种场景）：
+
+| 场景 | 后端地址写法 |
+|------|--------------|
+| ① 飞牛本机服务（原生应用 / 宿主机端口） | `http://host.docker.internal:端口` |
+| ② 其它 FnOS 应用容器（同 `trim-default` 网络） | `http://容器名:端口`（Traefik 经 Docker DNS 解析） |
+| ③ 局域网其它设备 | `http://内网IP:端口` |
 
 ```yaml
 http:
@@ -74,17 +87,19 @@ http:
     myservice:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:18080"
+          - url: "http://host.docker.internal:18080"   # ① 飞牛本机服务
         passHostHeader: true
 ```
 
-保存后 Traefik 会**热加载**，无需重启。
+该文件内置 20+ 常见服务的可勾选模板，**默认全部注释**，复制所需条目取消注释即可。保存后 Traefik 会**热加载**，无需重启。
 
 ### 使用自有证书（可选）
 
-1. 将证书 `your-domain.crt` / `your-domain.key` 放入飞牛共享目录 `traefik/data`。
-2. 取消 `dynamic/middlewares.yml` 中 `tls.stores.default.defaultCertificate` 注释并填好路径。
-3. 在 `traefik.yaml` 的 `websecure` 入口引用该 TLS Store。
+1. 将证书 `your-domain.crt` / `your-domain.key` 放入飞牛共享目录 `traefik/data/certificates/`。
+2. 取消 `dynamic/middlewares.yml` 中 `tls.stores.default.defaultCertificate` 注释并填好文件名。
+3. 证书将作为默认证书对所有 `50443` 域名自动生效。
+
+> 也可直接挂载飞牛「证书中心」签发的证书：在 `docker-compose.yaml` 取消 `- /vol1/1000/cloud/cert:/cert:ro` 并改为实际路径。
 
 ### 修改 Dashboard 远程访问密码
 
@@ -96,6 +111,33 @@ htpasswd -nbB 用户名 密码
 
 > 飞牛桌面走 `8080` 内网直连，不经过 BasicAuth；仅远程通过 `50443` 访问时需要认证。
 
+### 跳过后端证书校验（可选）
+
+反代使用自签证书的后端（如 PVE）时，在 `external-service.yml` 的 `serversTransports` 中已有 `insecure-skip`，于 service 引用即可：
+
+```yaml
+services:
+  pve:
+    loadBalancer:
+      serversTransport: insecure-skip
+      servers: [{ url: "https://host.docker.internal:8006" }]
+      passHostHeader: true
+```
+
+### 真实客户端 IP（进阶，可选）
+
+Traefik 已通过 `forwardedHeaders.trustedIPs` 信任内网网段的 `X-Forwarded-*`。若你的后端**只读取 `X-Real-IP`**（而非 `X-Forwarded-For`），可启用本地插件 `traefik-xff-to-xrealip` 将 XFF 转为 X-Real-IP：
+
+1. 在 `traefik.yaml` 取消 `experimental.localPlugins` 注释；
+2. 在 `docker-compose.yaml` 取消 `- ${TRIM_PKGVAR}/plugins:/plugins-local/src` 挂载，并将插件源码放入该目录；
+3. 在 `dynamic/middlewares.yml` 取消 `xff2realip` 中间件注释，并将其加入 `secure-headers` 链或单独引用。
+
+> 注意：官方 `traefik:latest` 镜像不含 Go 构建环境，本地插件需在构建镜像时预编译插件，否则会启动失败。生产环境建议用 `forwardedHeaders` 方案，仅在对 `X-Real-IP` 有强需求时启用插件。
+
+### HTTP → HTTPS 跳转（可选）
+
+如需将 `50080` 明文访问统一跳转至 `50443`，在 `dynamic/middlewares.yml` 取消 `redirect-to-https` 注释，并在对应路由的 `middlewares` 中引用它（启用后将无法再用 `50080` 明文访问）。
+
 ## 使用建议
 
 1. 部署前请确认 FNOS 已安装并运行 Docker。
@@ -105,7 +147,7 @@ htpasswd -nbB 用户名 密码
 
 ## 版本与反馈
 
-- 当前版本：1.0.0（首次发布）
+- 当前版本：1.0.0
 - 问题反馈：https://github.com/narrator-z/FnDepot/issues
 - 发布者：narratorz
 
