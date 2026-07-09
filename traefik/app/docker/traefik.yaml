@@ -1,22 +1,48 @@
-# traefik.yaml - Dynamic configuration file
-# This file is mounted into the container at /etc/traefik/traefik.yaml
-# You can modify this file to define routers, services, middlewares, etc.
-# For more information: https://doc.traefik.io/traefik/providers/file/
+# Traefik 静态配置（飞牛优化版）
+# 参考：ref/traefik-proxy/config/traefik/traefik.yml
 
-# Example: Define a simple router for a service running on port 8080 in Docker
-# http:
-#   routers:
-#     my-service:
-#       rule: Host(`example.com`)
-#       service: my-service
-#       entryPoints:
-#         - websecure
-#       tls:
-#         certResolver: myresolver
-#   services:
-#     my-service:
-#       loadBalancer:
-#         servers:
-#           - url: http://my-service:8080
+global:
+  checkNewVersion: false      # 关闭版本检查（内网环境无需）
+  sendAnonymousUsage: false   # 关闭匿名用量上报
 
-# Currently empty; configure as needed.
+api:
+  dashboard: true
+  insecure: true              # 飞牛桌面经 8080 端口内网直连 Dashboard（LAN 环境可接受）
+
+entryPoints:
+  # 避开飞牛系统占用的 80/443，改用高位端口，避免端口冲突导致无法启动
+  web:
+    address: ":50080"
+  websecure:
+    address: ":50443"
+    forwardedHeaders:
+      # 信任以下网段的 X-Forwarded-*，确保后端服务拿到真实客户端 IP
+      trustedIPs:
+        - "127.0.0.1/32"
+        - "::1/128"
+        - "192.168.0.0/16"
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+        - "172.18.0.0/16"
+        - "172.19.0.0/16"
+        - "fd00::/8"      # IPv6 唯一本地地址
+        - "fe80::/10"     # IPv6 链路本地地址
+    http:
+      middlewares:
+        - "secure-headers@file"   # 注入 iframe/CSP 头，飞牛桌面内嵌必需
+      tls: {}                      # 默认自签证书，开箱即用；如需自有证书见 dynamic/middlewares.yml 的 TLS Store
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false        # 仅代理显式打 traefik.enable=true 标签的容器
+    network: traefik               # 与 compose 中定义的网络一致
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true                    # 热加载动态配置（新增反代无需重启）
+
+log:
+  level: INFO
+  filePath: "/data/traefik.log"    # 日志写入飞牛共享目录 traefik/data
+
+accessLog: true

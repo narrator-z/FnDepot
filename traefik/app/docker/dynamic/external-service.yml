@@ -1,0 +1,32 @@
+# 反代「飞牛本机 / 局域网其他设备」上运行的服务
+# 关键：Traefik 运行在 bridge 网络，访问飞牛本机需用 host.docker.internal（compose 已配置 host-gateway）
+# 需要反代其它 Docker 容器时，让其加入 traefik 网络（见 README）。
+http:
+  routers:
+    # ===== 示例：反代飞牛本机监听 18080 的 Web 服务 =====
+    myservice:
+      rule: "Host(`svc.你的域名.com`)"
+      entryPoints:
+        - websecure
+      service: myservice
+      # middlewares:
+      #   - secure-headers@file
+  services:
+    myservice:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:18080"
+        passHostHeader: true
+
+  # ===== 示例：反代同一 traefik 网络中的其它 Docker 容器 =====
+  # othercontainer:
+  #   rule: "Host(`app.你的域名.com`)"
+  #   entryPoints:
+  #     - websecure
+  #   service: othercontainer
+  # services:
+  #   othercontainer:
+  #     loadBalancer:
+  #       servers:
+  #         - url: "http://othercontainer:8080"
+  #       passHostHeader: true

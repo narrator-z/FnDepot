@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   traefik:
     image: traefik:latest
@@ -8,35 +6,32 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - web
+      - traefik
     ports:
-      - "${TRIM_SERVICE_PORT}:8080"  # Web UI
-      - "80:80"
-      - "443:443"
+      - "${TRIM_SERVICE_PORT}:8080"   # Dashboard（飞牛桌面入口，供内嵌访问）
+      - "50080:50080"                 # HTTP 入口（避开飞牛占用的 80）
+      - "50443:50443"                 # HTTPS 入口（避开飞牛占用的 443）
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "${TRIM_PKGVAR}/traefik.yaml:/etc/traefik/traefik.yaml:ro"
-      - "${TRIM_PKGVAR}/acme.json:/etc/traefik/acme.json"
-      - "${TRIM_DATA_SHARE_PATHS}:/data" # Mount shared data path
-    command:
-      - "--api.dashboard=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com"
-      - "--certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json"
-      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "${TRIM_PKGVAR}/dynamic:/etc/traefik/dynamic:ro"
+      - "${TRIM_DATA_SHARE_PATHS}:/data"
+    # 允许 Traefik 反代「飞牛本机」上运行的服务（见 dynamic/external-service.yml）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`traefik.yourdomain.com`)"
-      - "traefik.http.routers.api.service=api@internal"
-      - "traefik.http.routers.api.middlewares=auth"
-      - "traefik.http.middlewares.auth.basicauth.users=user:$$apr1$$Xy9G0hIe$$D1m7.g3D1J2G.x0Y0J.2M0" # user:password
-      - "traefik.http.routers.dashboard.rule=Host(`dashboard.yourdomain.com`)"
-      - "traefik.http.routers.dashboard.service=dashboard@internal"
-      - "traefik.http.routers.dashboard.middlewares=auth"
+      # 通过 50443 远程访问 Dashboard 时启用 BasicAuth 保护（飞牛桌面走 8080 内网直连）
+      - "traefik.http.routers.dashboard.rule=Host(`dashboard.traefik.localhost`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=secure-headers@file,basic-auth@file"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
-  web:
-    external: true
+  traefik:
+    driver: bridge

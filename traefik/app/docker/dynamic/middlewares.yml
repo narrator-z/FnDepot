@@ -1,0 +1,30 @@
+# 动态中间件配置（被静态配置中的 secure-headers@file / basic-auth@file 引用）
+http:
+  middlewares:
+    # 安全响应头：允许被飞牛桌面以 iframe 内嵌（frame-ancestors *），并关闭会阻断内嵌的帧策略
+    secure-headers:
+      headers:
+        sslRedirect: false
+        frameDeny: false            # ❌ 必须关闭，否则所有 iframe 被拦截
+        customFrameOptionsValue: "" # ❌ 必须清空，否则强制 SAMEORIGIN
+        contentTypeNosniff: true
+        browserXssFilter: true
+        customResponseHeaders:
+          Content-Security-Policy: "frame-ancestors *;"
+        sslProxyHeaders:
+          X-Forwarded-Proto: "https"
+
+    # Dashboard 远程访问（50443）基础认证，请替换为你自己的哈希
+    # 生成方式：htpasswd -nbB 用户名 密码
+    basic-auth:
+      basicAuth:
+        users:
+          - "admin:$2y$05$6W8GpX4z1kLQZ3q7vYw8eO4K9mN2pQrS1tUvWxYzA0bC1dE2fG3hI4jK5l"  # admin / 请修改
+
+  # 可选：自有证书。将证书放到数据目录后取消注释并在 websecure 引用
+  # tls:
+  #   stores:
+  #     default:
+  #       defaultCertificate:
+  #         certFile: "/data/your-domain.crt"
+  #         keyFile:  "/data/your-domain.key"

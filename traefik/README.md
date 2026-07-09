@@ -1,59 +1,107 @@
 # Traefik 反向代理
 
-轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。本应用以 Docker 容器方式部署在 FNOS 上，开箱即用，适合在家庭或私有网络中统一管理多条服务的入口流量与 TLS 证书。
+轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。本应用针对 **FNOS（飞牛）** 做了专门适配，以 Docker 容器方式部署，开箱即用，适合在家庭或私有网络中统一管理多条服务的入口流量与 TLS。
 
 ## 特性
 
-- **自动化服务发现**：对接 Docker provider，容器启停后自动更新路由，无需手动维护映射。
-- **内置 Dashboard**：提供可视化控制面板，实时查看路由、服务、中间件与健康状态。
-- **自动 HTTPS**：集成 ACME（TLS Challenge）自动签发与续期 Let's Encrypt 证书。
-- **多 EntryPoint**：默认开放 `80`（web）与 `443`（websecure）入口，并暴露 Dashboard 端口。
-- **中间件支持**：基础认证（BasicAuth）、重定向、压缩等中间件开箱即用。
+- **飞牛端口避让**：入口使用 `50080` / `50443`，避开飞牛系统占用的 `80` / `443`，避免端口冲突导致无法启动。
+- **自动化服务发现**：对接 Docker provider，仅代理显式打标签的容器，启停后自动更新路由。
+- **内置 Dashboard**：可视化控制面板，飞牛桌面经 `8080` 端口内网直连访问。
+- **默认 HTTPS**：`websecure` 入口启用默认自签证书，开箱即用；可替换为自有证书（见下文）。
+- **真实客户端 IP**：信任 Docker / 内网网段的 `X-Forwarded-*`，后端能拿到真实来源。
+- **桌面内嵌支持**：注入 `frame-ancestors *` 等安全头，确保可被飞牛桌面以 iframe 正常内嵌。
 
-## 部署说明
+## 文件结构
 
-应用通过 Docker Compose 启动，核心配置如下：
+```
+traefik/app/docker/
+├── docker-compose.yaml        # 容器编排（端口、挂载、网络）
+├── traefik.yaml               # 静态配置（入口/API/Provider/日志）
+└── dynamic/
+    ├── middlewares.yml        # secure-headers（内嵌头）、basic-auth、TLS Store 模板
+    └── external-service.yml   # 反代飞牛本机/局域网服务的示例（默认注释）
+```
 
-- 镜像：`traefik:latest`
-- 容器名：`traefik`
-- 重启策略：`unless-stopped`
-- 挂载：Docker socket（只读）、`traefik.yaml` 动态配置、`acme.json` 证书存储、共享数据目录 `/data`
-
-### 端口
+## 端口
 
 | 容器端口 | 主机映射 | 说明 |
 |----------|----------|------|
-| 8080 | `${TRIM_SERVICE_PORT}` | Traefik Dashboard / Web UI |
-| 80 | 80 | HTTP 入口（web） |
-| 443 | 443 | HTTPS 入口（websecure） |
+| 8080 | `${TRIM_SERVICE_PORT}` | Traefik Dashboard（飞牛桌面入口，内网直连） |
+| 50080 | 50080 | HTTP 入口（web，避开系统 80） |
+| 50443 | 50443 | HTTPS 入口（websecure，避开系统 443） |
 
-> Dashboard 地址默认通过 `Host(`traefik.yourdomain.com`)` 与 `Host(`dashboard.yourdomain.com`)` 路由，并启用 BasicAuth 中间件保护。
+> 飞牛系统默认占用 `80` / `443`，因此本应用不再绑定这两个端口。如需对外暴露标准 80/443，请在飞牛的「lucky」等系统反代中做一层转发，或自行修改 `traefik.yaml` 的 entryPoints。
+
+## 快速使用
+
+1. 在飞牛应用中心安装并启动本应用。
+2. 打开飞牛桌面中的 Traefik，即可访问 Dashboard（端口 8080）。
+3. 通过 `https://<飞牛IP>:50443` 访问被代理的服务（默认自签证书，浏览器会提示不安全，属正常现象）。
 
 ## 配置
 
-安装后可在应用数据目录中编辑以下文件：
+### 反代 Docker 容器
 
-- `traefik.yaml`：Traefik 动态配置文件，用于定义 router / service / middleware。文件内置示例（已注释），按需取消注释并填写你的域名与服务地址即可生效。
-- `acme.json`：ACME 证书存储，由 Traefik 自动维护，请勿手动编辑。
+在**其它** compose 服务中加入 `traefik` 网络并打标签即可被自动发现：
 
-### 启用自动 HTTPS
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.myapp.rule=Host(`app.你的域名.com`)"
+      - "traefik.http.routers.myapp.entrypoints=websecure"
+networks:
+  traefik:
+    external: true
+```
 
-在 `docker-compose.yaml` 的 `command` 段落已预置 ACME 配置：
+### 反代飞牛本机 / 局域网服务
 
-- 邮箱：`--certificatesresolvers.myresolver.acme.email`（请替换为你的真实邮箱）
-- 解析器：`myresolver`，使用 `tlschallenge`
-- 在动态配置中将路由的 `tls.certResolver` 指向 `myresolver` 即可自动签发证书
+编辑 `dynamic/external-service.yml`，使用 `host.docker.internal` 指向飞牛本机端口（compose 已配置 `host.docker.internal:host-gateway`）：
 
-### 修改 Dashboard 密码
+```yaml
+http:
+  routers:
+    myservice:
+      rule: "Host(`svc.你的域名.com`)"
+      entryPoints: [websecure]
+      service: myservice
+  services:
+    myservice:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:18080"
+        passHostHeader: true
+```
 
-默认 BasicAuth 用户为 `user:password`（示例哈希）。请使用 `htpasswd` 生成新哈希并替换 `docker-compose.yaml` 中 `traefik.http.middlewares.auth.basicauth.users` 的值。
+保存后 Traefik 会**热加载**，无需重启。
+
+### 使用自有证书（可选）
+
+1. 将证书 `your-domain.crt` / `your-domain.key` 放入飞牛共享目录 `traefik/data`。
+2. 取消 `dynamic/middlewares.yml` 中 `tls.stores.default.defaultCertificate` 注释并填好路径。
+3. 在 `traefik.yaml` 的 `websecure` 入口引用该 TLS Store。
+
+### 修改 Dashboard 远程访问密码
+
+`websecure`（50443）上的 Dashboard 受 BasicAuth 保护。请生成自己的哈希并替换 `dynamic/middlewares.yml` 中 `basic-auth` 的值：
+
+```bash
+htpasswd -nbB 用户名 密码
+```
+
+> 飞牛桌面走 `8080` 内网直连，不经过 BasicAuth；仅远程通过 `50443` 访问时需要认证。
 
 ## 使用建议
 
 1. 部署前请确认 FNOS 已安装并运行 Docker。
-2. 将示例中的 `yourdomain.com`、`your-email@example.com` 替换为你自己的域名与邮箱。
-3. 如需对外暴露 Dashboard，请确保域名已正确解析到本机，并配置好防火墙/端口转发。
-4. 动态配置修改后，Traefik 会热加载，通常无需重启容器。
+2. 将示例中的 `你的域名.com` 替换为你自己的域名。
+3. 动态配置修改后 Traefik 会自动热加载，通常无需重启容器。
+4. 日志写入飞牛共享目录 `traefik/data/traefik.log`，便于排查。
 
 ## 版本与反馈
 
