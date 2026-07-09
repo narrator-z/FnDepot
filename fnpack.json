@@ -1,26 +1,16 @@
 {
-  "apps": [
-    {
-      "name": "traefik",
-      "version": "1.0.0",
-      "arch": ["amd64"],
-      "description": "轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。",
-      "maintainer": "narratorz",
-      "maintainer_url": "https://github.com/narratorz",
-      "distributor": "narratorz",
-      "distributor_url": "https://github.com/narratorz",
-      "platform": "all",
-      "os_min_version": "0.9.27",
-      "os_max_version": "0.9.100",
-      "install_type": "docker",
-      "ctl_stop": true,
-      "checkport": true,
-      "service_port": 8080,
-      "disable_authorization_path": false,
-      "desktop_uidir": "ui",
-      "desktop_applaunchname": "traefik.Application",
-      "changelog": "首次发布",
-      "install_dep_apps": []
-    }
-  ]
+  "traefik": {
+    "display_name": "Traefik 反向代理",
+    "platform": "all",
+    "version": "1.0.0",
+    "desc": "轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。",
+    "labels": "反向代理,负载均衡,网络工具",
+    "distributor": "narratorz",
+    "distributor_url": "https://github.com/narrator-z/FnDepot",
+    "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
+    "install_type": "系统空间",
+    "isdocker": "true",
+    "size": "73.06KB",
+    "changelog": "首次发布"
+  }
 }
