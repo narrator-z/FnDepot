@@ -1,14 +1,19 @@
-# 反代「飞牛本机 / 局域网设备 / 其它 FnOS 应用容器」的服务目录（通用版）
-# 参考：ref/traefik-proxy/config/dynamic/external-service.yml（已去个性化，改为可勾选模板）
+# 反代「非 Docker 应用 / 服务」的通用目录
+# ════════════════════════════════════════════════════════════════
+# 反代分类总览（详见 README「反代分类」）：
+#   A. Docker 应用      → 由 Docker Provider 自动发现（接入 trim-default 网络），无需在此配置。
+#   B. 非 Docker 应用   → 本文件（飞牛本机原生应用 / 局域网设备 / 通用目录）
+#                         + dynamic/fnos.yml（飞牛系统主页，复用飞牛 HTTP/HTTPS 端口）。
+# ════════════════════════════════════════════════════════════════
 #
-# ── 后端地址怎么填（三种场景）──
-#   ① 飞牛本机服务（原生应用 / 宿主机端口）  →  http://host.docker.internal:端口
-#   ② 其它 FnOS 应用容器（同 trim-default 网络）→ http://容器名:端口   （Traefik 经 Docker DNS 解析）
-#   ③ 局域网其它设备                          →  http://内网IP:端口
+# 后端地址写法（三种）：
+#   ① 飞牛本机服务（原生应用 / 宿主机端口）→  http://host.docker.internal:端口
+#   ③ 局域网其它设备                       →  http://内网IP:端口
+# ② 其它 FnOS 容器（Docker 应用）→ 由 A 类自动发现，或 http://容器名:端口
 #
-# ── 启用方法 ──
-#   复制下方「模板」或你需要的服务块，取消注释，把 Host 改成你的域名、端口改成实际端口即可。
+# 启用：复制所需条目取消注释，把 Host 改成你的域名、端口改成实际端口即可。
 #   默认全部注释，开箱即用、不会因指向不存在的服务而报错。
+#   保存后 Traefik 自动热加载，无需重启。
 
 http:
   routers:
@@ -19,12 +24,12 @@ http:
     #   service: myservice
     #   # 可选中间件（按需取消对应注释）：
     #   # middlewares:
-    #   #   - secure-headers@file   # 需要被 iframe 内嵌 / 注入 CSP 头
-    #   #   - basic-auth@file       # 需要 BasicAuth 密码保护
+    #   #   - secure-headers@file   # 需被 iframe 内嵌 / 注入 CSP 头
+    #   #   - basic-auth@file       # 需 BasicAuth 密码保护
     #   #   - fix-host@file         # 后端校验 Host（见 middlewares.yml）
-    #   # tls: {}                   # 用自签证书（websecure 已默认启用，可不写）
+    #   # tls: {}                   # websecure 已默认启用 TLS，可不写
 
-    # ===== 智能家居 / IoT =====
+    # ===== ① 飞牛本机原生应用（宿主机端口，host.docker.internal）=====
     # homeassistant:
     #   rule: "Host(`ha.your-domain.example`)"
     #   entryPoints: [web, websecure]
@@ -41,8 +46,6 @@ http:
     #   rule: "Host(`esp.your-domain.example`)"
     #   entryPoints: [web, websecure]
     #   service: esphome
-
-    # ===== 影音媒体 =====
     # emby:
     #   rule: "Host(`tv.your-domain.example`)"
     #   entryPoints: [web, websecure]
@@ -63,8 +66,6 @@ http:
     #   rule: "Host(`alist.your-domain.example`)"
     #   entryPoints: [web, websecure]
     #   service: alist
-
-    # ===== 下载 / 文件 =====
     # qinglong:
     #   rule: "Host(`ql.your-domain.example`)"
     #   entryPoints: [web, websecure]
@@ -85,8 +86,6 @@ http:
     #   rule: "Host(`book.your-domain.example`)"
     #   entryPoints: [web, websecure]
     #   service: calibre
-
-    # ===== 开发 / 运维工具 =====
     # gitea:
     #   rule: "Host(`git.your-domain.example`)"
     #   entryPoints: [web, websecure]
@@ -117,12 +116,27 @@ http:
     #   rule: "Host(`adg.your-domain.example`)"
     #   entryPoints: [web, websecure]
     #   service: adguard
-
-    # ===== 测试用（配合 whoami 容器验证反代）=====
     # whoami:
     #   rule: "Host(`whoami.your-domain.example`)"
     #   entryPoints: [web, websecure]
     #   service: whoami
+
+    # ===== ③ 局域网设备（内网 IP，非飞牛本机）=====
+    # 例：路由器 / 交换机 / 其它 NAS / IoT 网关。建议叠加 basic-auth。
+    # router:
+    #   rule: "Host(`router.your-domain.example`)"
+    #   entryPoints: [web, websecure]
+    #   service: router
+    #   middlewares:
+    #     - basic-auth@file
+    # pve:
+    #   rule: "Host(`pve.your-domain.example`)"
+    #   entryPoints: [websecure]
+    #   service: pve
+    #   middlewares:
+    #     - basic-auth@file
+    #   tls: {}
+    #   # 若 PVE 使用自签证书，service 需引用 insecure-skip（见下方 serversTransports）
 
   services:
     # ===== 模板 =====
@@ -132,19 +146,15 @@ http:
     #       - url: "http://host.docker.internal:18080"   # ① 飞牛本机服务
     #     passHostHeader: true
 
-    # ===== 智能家居 / IoT（端口为各服务默认，请按需调整）=====
+    # ===== ① 飞牛本机原生应用（端口为各服务默认，请按需调整）=====
     # homeassistant:
-    #   loadBalancer:
-    #     servers: [{ url: "http://host.docker.internal:8123" }]   # 或 http://homeassistant:8123
-    #     passHostHeader: true
+    #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8123" }], passHostHeader: true }
     # homebridge:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8581" }], passHostHeader: true }
     # nodered:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:1880" }], passHostHeader: true }
     # esphome:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:6052" }], passHostHeader: true }
-
-    # ===== 影音媒体 =====
     # emby:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8096" }], passHostHeader: true }
     # jellyfin:
@@ -155,8 +165,6 @@ http:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:4533" }], passHostHeader: true }
     # alist:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:5244" }], passHostHeader: true }
-
-    # ===== 下载 / 文件 =====
     # qinglong:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:5700" }], passHostHeader: true }
     # aria2:
@@ -167,8 +175,6 @@ http:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:80" }], passHostHeader: true }
     # calibre:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:8083" }], passHostHeader: true }
-
-    # ===== 开发 / 运维工具 =====
     # gitea:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:3000" }], passHostHeader: true }
     # vaultwarden:
@@ -183,15 +189,20 @@ http:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:9090" }], passHostHeader: true }
     # adguard:
     #   loadBalancer: { servers: [{ url: "http://host.docker.internal:3000" }], passHostHeader: true }
-
-    # ===== 测试用 =====
     # whoami:
     #   loadBalancer: { servers: [{ url: "http://whoami:80" }], passHostHeader: true }   # 配合 whoami 容器
+
+    # ===== ③ 局域网设备 =====
+    # router:
+    #   loadBalancer: { servers: [{ url: "http://192.168.1.1" }], passHostHeader: true }
+    # pve:
+    #   loadBalancer:
+    #     serversTransport: insecure-skip     # PVE 自签证书，跳过校验
+    #     servers: [{ url: "https://192.168.1.10:8006" }]
+    #     passHostHeader: true
 
   # ── serversTransports：连接后端时跳过 TLS 校验（后端用自签证书时）──
   # 在 service 中通过 `serversTransport: insecure-skip` 引用。
   serversTransports:
     insecure-skip:
       insecureSkipVerify: true
-    # pve-transport:
-    #   insecureSkipVerify: true      # 例：反代 PVE 管理页

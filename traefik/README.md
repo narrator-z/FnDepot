@@ -14,6 +14,7 @@
 - **真实客户端 IP**：信任 Docker / 内网网段的 `X-Forwarded-*`，后端能拿到真实来源（进阶见「真实客户端 IP」）。
 - **桌面内嵌支持**：注入 `frame-ancestors *` 等安全头，确保可被飞牛桌面以 iframe 正常内嵌。
 - **通用服务目录**：内置 20+ 常见自建服务（Home Assistant / Emby / Gitea / AList / Vaultwarden 等）的可勾选反代模板。
+- **飞牛系统主页反代**：直接复用飞牛自身的 HTTP/HTTPS 端口（默认 5666/5667）经 Traefik 访问飞牛主页，无需额外暴露端口。
 - **HTTPS Only 开关**：一键将 HTTP(50080) 全量跳转至 HTTPS(50443)，默认关闭（HTTP / HTTPS 双入口并存）。
 
 ## 文件结构
@@ -25,7 +26,8 @@ traefik/app/docker/
 └── dynamic/
     ├── middlewares.yml        # secure-headers（内嵌头）、basic-auth、可选中间件与 TLS Store
     ├── dashboard.yml          # 远程 Dashboard 路由（50443 + BasicAuth）
-    └── external-service.yml   # 反代「本机 / 局域网 / 其它应用」的通用服务目录（默认注释）
+    ├── fnos.yml               # 飞牛系统主页反代（复用飞牛 HTTP/HTTPS 端口 5666/5667）
+    └── external-service.yml   # 反代「本机 / 局域网」非 Docker 应用的通用目录（默认注释）
 ```
 
 ## 端口
@@ -44,9 +46,32 @@ traefik/app/docker/
 2. 打开飞牛桌面中的 Traefik，即可访问 Dashboard（端口 8080）。
 3. 通过 `https://<飞牛IP>:50443` 访问被代理的服务（默认自签证书，浏览器提示不安全属正常现象）。
 
+## 反代分类
+
+本应用的反代对象分为两大类，按需选择配置方式：
+
+| 类别 | 反代对象 | 配置方式 |
+|------|----------|----------|
+| **A. Docker 应用** | 其它 FnOS 应用容器（运行在 Docker 中） | 由 Docker Provider **自动发现**（接入 `trim-default` 网络 + 打标签），无需手动写配置。见下方「反代其它 FnOS 应用容器」。 |
+| **B. 非 Docker 应用** | 飞牛系统本身、飞牛本机原生应用、局域网设备 | 文件式配置：`dynamic/fnos.yml`（飞牛系统主页）+ `dynamic/external-service.yml`（本机 / 局域网 / 通用目录）。 |
+
+> 入口统一为 `50080`(HTTP) 与 `50443`(HTTPS)；是否强制 HTTPS 见「HTTPS Only 开关」。
+
+### 飞牛系统主页反代（非 Docker · 特殊目标）
+
+飞牛系统在「设置 → 网络/常规」中可配置自身的 HTTP / HTTPS 端口（**V0.8.22 起默认 `5666` / `5667`**，更早公测版为 `8000` / `8001`）。本应用可直接复用这些端口，把飞牛主页也收编进 Traefik 统一入口：
+
+- 配置文件：`dynamic/fnos.yml`（默认已写好，仅 Host 为占位域名）。
+- 启用：把 `rule` 的 `Host(\`fnos.your-domain.example\`)` 改成你的域名（或飞牛 IP），取消注释即可。
+  - `50080` → 转发到飞牛 HTTP 端口（默认 `5666`）
+  - `50443` → 转发到飞牛 HTTPS 端口（默认 `5667`，自签证书，已跳过校验）
+- 远程经 `50443` 访问会叠加 `basic-auth` 密码保护。
+
+> 若你在飞牛设置中修改过系统端口，请同步改 `fnos.yml` 里的 `5666` / `5667` 两个数字（端口值来自社区整理的 NAS 默认端口表，请以你飞牛设置中的实际值为准）。
+
 ## 配置
 
-### 反代其它 FnOS 应用容器（自动发现）
+### 反代其它 FnOS 应用容器（自动发现，类别 A）
 
 Traefik 已接入飞牛默认网络 `trim-default`。只要在**其它**应用的容器上打标签，即可被自动发现，无需手写 IP：
 
