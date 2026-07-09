@@ -25,13 +25,16 @@ http:
         users:
           - "admin:$2y$05$REPLACE_WITH_YOUR_htpasswd_OUTPUT"   # admin / 请修改
 
-    # ── 可选：HTTP 50080 → HTTPS 50443 全量跳转 ──
-    # 启用后，所有 50080 明文访问将被 301 跳转到 50443；如保留 LAN 明文入口请勿启用。
-    # redirect-to-https:
-    #   redirectScheme:
-    #     scheme: https
-    #     port: "50443"
-    #     permanent: true
+    # ── HTTPS Only 跳转（HTTP 50080 → HTTPS 50443）──
+    # 本中间件即「HTTPS Only」开关的执行体，由 traefik.yaml 的 web 入口 middlewares 引用：
+    #   · 在 web 入口启用它  → 开启「HTTPS Only」：所有 50080(HTTP) 访问 301 跳转至 50443(HTTPS)。
+    #   · 不在 web 入口引用  → 同时保留 HTTP(50080) 与 HTTPS(50443) 两个入口（默认）。
+    # 仅当 traefik.yaml 的 web 入口引用本中间件时才生效，此处只需保持定义。
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        port: "50443"
+        permanent: true
 
     # ── 可选：修正后端 Host 头 ──
     # 部分应用（如 Gitea）校验 Host，需用固定域名访问后端，否则返回 404/异常。

@@ -15,8 +15,7 @@ http:
     # ===== 模板（复制后修改）=====
     # myservice:
     #   rule: "Host(`svc.your-domain.example`)"
-    #   entryPoints:
-    #     - websecure
+    #   entryPoints: [web, websecure]   # 同时支持 HTTP(50080) 与 HTTPS(50443)
     #   service: myservice
     #   # 可选中间件（按需取消对应注释）：
     #   # middlewares:
@@ -28,101 +27,101 @@ http:
     # ===== 智能家居 / IoT =====
     # homeassistant:
     #   rule: "Host(`ha.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: homeassistant
     # homebridge:
     #   rule: "Host(`hb.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: homebridge
     # nodered:
     #   rule: "Host(`nr.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: nodered
     # esphome:
     #   rule: "Host(`esp.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: esphome
 
     # ===== 影音媒体 =====
     # emby:
     #   rule: "Host(`tv.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: emby
     # jellyfin:
     #   rule: "Host(`jf.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: jellyfin
     # plex:
     #   rule: "Host(`px.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: plex
     # navidrome:
     #   rule: "Host(`music.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: navidrome
     # alist:
     #   rule: "Host(`alist.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: alist
 
     # ===== 下载 / 文件 =====
     # qinglong:
     #   rule: "Host(`ql.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: qinglong
     # aria2:
     #   rule: "Host(`aria2.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: aria2
     # webdav:
     #   rule: "Host(`dav.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: webdav
     # nextcloud:
     #   rule: "Host(`nc.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: nextcloud
     # calibre:
     #   rule: "Host(`book.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: calibre
 
     # ===== 开发 / 运维工具 =====
     # gitea:
     #   rule: "Host(`git.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: gitea
     #   middlewares:
     #     - fix-host@file          # Gitea 需要固定 Host
     # vaultwarden:
     #   rule: "Host(`key.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: vaultwarden
     # portainer:
     #   rule: "Host(`port.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: portainer
     # uptimekuma:
     #   rule: "Host(`uptime.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: uptimekuma
     # grafana:
     #   rule: "Host(`graf.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: grafana
     # prometheus:
     #   rule: "Host(`prom.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: prometheus
     # adguard:
     #   rule: "Host(`adg.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: adguard
 
     # ===== 测试用（配合 whoami 容器验证反代）=====
     # whoami:
     #   rule: "Host(`whoami.your-domain.example`)"
-    #   entryPoints: [websecure]
+    #   entryPoints: [web, websecure]
     #   service: whoami
 
   services:

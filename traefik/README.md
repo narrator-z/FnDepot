@@ -14,7 +14,7 @@
 - **真实客户端 IP**：信任 Docker / 内网网段的 `X-Forwarded-*`，后端能拿到真实来源（进阶见「真实客户端 IP」）。
 - **桌面内嵌支持**：注入 `frame-ancestors *` 等安全头，确保可被飞牛桌面以 iframe 正常内嵌。
 - **通用服务目录**：内置 20+ 常见自建服务（Home Assistant / Emby / Gitea / AList / Vaultwarden 等）的可勾选反代模板。
-- **进阶能力（可选）**：自定义 Host 头、HTTP→HTTPS 跳转、自有 TLS 证书、跳过后端证书校验、本地插件转换真实 IP。
+- **HTTPS Only 开关**：一键将 HTTP(50080) 全量跳转至 HTTPS(50443)，默认关闭（HTTP / HTTPS 双入口并存）。
 
 ## 文件结构
 
@@ -81,7 +81,7 @@ http:
   routers:
     myservice:
       rule: "Host(`svc.你的域名.com`)"
-      entryPoints: [websecure]
+      entryPoints: [web, websecure]
       service: myservice
   services:
     myservice:
@@ -134,9 +134,25 @@ Traefik 已通过 `forwardedHeaders.trustedIPs` 信任内网网段的 `X-Forward
 
 > 注意：官方 `traefik:latest` 镜像不含 Go 构建环境，本地插件需在构建镜像时预编译插件，否则会启动失败。生产环境建议用 `forwardedHeaders` 方案，仅在对 `X-Real-IP` 有强需求时启用插件。
 
-### HTTP → HTTPS 跳转（可选）
+### HTTPS Only 开关（可选）
 
-如需将 `50080` 明文访问统一跳转至 `50443`，在 `dynamic/middlewares.yml` 取消 `redirect-to-https` 注释，并在对应路由的 `middlewares` 中引用它（启用后将无法再用 `50080` 明文访问）。
+默认情况下，应用**同时提供 HTTP(50080) 与 HTTPS(50443) 两个入口**，局域网明文访问可用。
+
+若希望**仅保留 HTTPS（强制加密）**，开启「HTTPS Only」：
+
+1. 打开 `traefik.yaml`，在 `entryPoints.web.http` 下取消 `middlewares` 注释：
+
+   ```yaml
+   web:
+     address: ":50080"
+     http:
+       middlewares:
+         - redirect-to-https@file   # 开启后：所有 50080(HTTP) 访问 301 跳转至 50443(HTTPS)
+   ```
+
+2. 保存后 Traefik 自动热加载。此后所有经 `50080`(HTTP) 的访问将被 `301` 跳转至 `50443`(HTTPS)。
+
+> **50443 为独立定义的 HTTPS 端口**；关闭本开关（保持注释）即恢复 HTTP / HTTPS 双入口并存。该跳转即 `redirect-to-https` 中间件，由 `web` 入口统一引用，无需逐条路由配置。
 
 ## 使用建议
 

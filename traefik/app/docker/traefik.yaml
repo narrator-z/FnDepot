@@ -11,9 +11,18 @@ api:
   insecure: true              # 飞牛桌面经 8080 端口内网直连 Dashboard（LAN 环境可接受）
 
 entryPoints:
-  # 避开飞牛系统占用的 80/443，改用高位端口，避免端口冲突导致无法启动
+  # 入口端口：避开飞牛系统占用的 80/443，改用高位端口，避免端口冲突导致无法启动。
+  #   web       = HTTP  入口（50080）
+  #   websecure = HTTPS 入口（50443，独立定义）
   web:
     address: ":50080"
+    http:
+      # ── HTTPS Only 开关 ──
+      # 取消下面 middlewares 的注释 = 开启「HTTPS Only」：
+      #   所有经 50080(HTTP) 的访问将被 301 跳转至 50443(HTTPS)。
+      # 保持注释 = 同时保留 HTTP(50080) 与 HTTPS(50443) 两个入口（默认推荐，LAN 明文可达）。
+      # middlewares:
+      #   - redirect-to-https@file
   websecure:
     address: ":50443"
     forwardedHeaders:
