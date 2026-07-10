@@ -12,5 +12,19 @@
     "isdocker": "true",
     "size": "73.06KB",
     "changelog": "首次发布"
+  },
+  "MoviePilot": {
+    "display_name": "MoviePilot",
+    "platform": "all",
+    "version": "2.14.2",
+    "desc": "NAS媒体库自动化管理工具，基于Jackett和Plex",
+    "labels": "媒体,自动化,下载",
+    "distributor": "narrator-z",
+    "distributor_url": "https://github.com/narrator-z/FnDepot",
+    "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
+    "install_type": "docker",
+    "isdocker": "true",
+    "size": "500MB",
+    "changelog": "更新镜像至ghcr.io/narrator-z/moviepilot:latest"
   }
 }

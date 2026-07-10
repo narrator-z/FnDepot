@@ -8,8 +8,8 @@ services:
     network_mode: host
     volumes:
       - './media:/media'
-      - './moviepilot-v2/config:/config'
-      - './moviepilot-v2/core:/moviepilot/.cache/ms-playwright'
+      - './config:/config'
+      - './core:/moviepilot/.cache/ms-playwright'
       - '/var/run/docker.sock:/var/run/docker.sock:ro'
 
     environment:
