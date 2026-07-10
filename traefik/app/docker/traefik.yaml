@@ -16,13 +16,7 @@ entryPoints:
   #   websecure = HTTPS 入口（50443，独立定义）
   web:
     address: ":50080"
-    http:
-      # ── HTTPS Only 开关 ──
-      # 取消下面 middlewares 的注释 = 开启「HTTPS Only」：
-      #   所有经 50080(HTTP) 的访问将被 301 跳转至 50443(HTTPS)。
-      # 保持注释 = 同时保留 HTTP(50080) 与 HTTPS(50443) 两个入口（默认推荐，LAN 明文可达）。
-      # middlewares:
-      #   - redirect-to-https@file
+    # HTTP 入口；是否强制跳转 HTTPS 由动态配置 dynamic/redirect.yml 控制（「HTTPS Only」开关，向导生成）。
   websecure:
     address: ":50443"
     forwardedHeaders:

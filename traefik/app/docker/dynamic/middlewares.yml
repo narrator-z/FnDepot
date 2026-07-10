@@ -1,6 +1,6 @@
-# 动态中间件与 TLS 配置
-# 被静态配置中的 secure-headers@file / basic-auth@file 引用；
-# 其余中间件（redirect / fix-host / xff2realip）默认注释，按需启用。
+# 动态中间件与 TLS 配置（用户可编辑，常驻包内；首次安装时拷贝到数据目录 dynamic/）
+# 被静态配置与路由引用：secure-headers@file / basic-auth@file。
+# 注：由向导生成的认证（dash-auth）写在数据目录的 auth.yml，远程 Dashboard 跳转（redirect-to-https）写在 redirect.yml，均不在此处。
 
 http:
   middlewares:
@@ -8,7 +8,7 @@ http:
     # frameDeny 必须关闭、customFrameOptionsValue 必须清空，否则 iframe 被拦截。
     secure-headers:
       headers:
-        sslRedirect: false             # 不强制跳转，保留 50080(LAN HTTP) 入口；如需 50080→50443 见 redirect-to-https
+        sslRedirect: false             # 不强制跳转，保留 50080(LAN HTTP) 入口；HTTPS Only 跳转由 redirect.yml 控制
         frameDeny: false               # ❌ 必须关闭，否则所有 iframe 被拦截（飞牛桌面内嵌必需）
         customFrameOptionsValue: ""    # ❌ 必须清空，否则强制 SAMEORIGIN
         contentTypeNosniff: true
@@ -18,23 +18,13 @@ http:
         sslProxyHeaders:
           X-Forwarded-Proto: "https"
 
-    # ── Dashboard 远程访问（50443）基础认证：务必替换为你自己的哈希 ──
-    # 生成方式：htpasswd -nbB 用户名 密码   （需安装 apache2-utils / httpd-tools）
+    # ── 通用 BasicAuth（用于 external-service.yml 中需要密码保护的服务）──
+    # 生成方式：htpasswd -nbB 用户名 密码（需 apache2-utils / httpd-tools）。
+    # 下方为占位哈希，启用前务必替换，否则无法登录。
     basic-auth:
       basicAuth:
         users:
-          - "admin:$2y$05$REPLACE_WITH_YOUR_htpasswd_OUTPUT"   # admin / 请修改
-
-    # ── HTTPS Only 跳转（HTTP 50080 → HTTPS 50443）──
-    # 本中间件即「HTTPS Only」开关的执行体，由 traefik.yaml 的 web 入口 middlewares 引用：
-    #   · 在 web 入口启用它  → 开启「HTTPS Only」：所有 50080(HTTP) 访问 301 跳转至 50443(HTTPS)。
-    #   · 不在 web 入口引用  → 同时保留 HTTP(50080) 与 HTTPS(50443) 两个入口（默认）。
-    # 仅当 traefik.yaml 的 web 入口引用本中间件时才生效，此处只需保持定义。
-    redirect-to-https:
-      redirectScheme:
-        scheme: https
-        port: "50443"
-        permanent: true
+          - "admin:$2y$05$REPLACE_WITH_YOUR_htpasswd_OUTPUT"
 
     # ── 可选：修正后端 Host 头 ──
     # 部分应用（如 Gitea）校验 Host，需用固定域名访问后端，否则返回 404/异常。
@@ -43,7 +33,7 @@ http:
     #     customRequestHeaders:
     #       Host: "git.your-domain.example:50443"
 
-    # ── 可选：真实客户端 IP（XFF→X-Real-IP） ──
+    # ── 可选：真实客户端 IP（XFF→X-Real-IP）──
     # 依赖本地插件 traefik-xff-to-xrealip（见 traefik.yaml 顶部说明），默认不启用。
     # xff2realip:
     #   plugin:

@@ -2,4 +2,9 @@
 
 ### This script is called after the user uninstalls the application.
 
+# 按卸载向导选择处理数据：keep = 保留，delete = 删除全部应用数据。
+if [ "${wizard_data_action:-keep}" = "delete" ]; then
+  rm -rf "${TRIM_DATA_SHARE_PATHS}"
+fi
+
 exit 0

@@ -1,5 +1,7 @@
 #!/bin/bash
 
 ### This script is called after the user installs the application.
+### 安装后依据向导输入生成 Traefik 动态配置。
 
+bash "$(dirname "$0")/config_callback"
 exit 0

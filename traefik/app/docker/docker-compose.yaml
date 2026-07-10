@@ -14,6 +14,8 @@ services:
     image: traefik:latest
     container_name: traefik
     restart: unless-stopped
+    environment:
+      - TZ=${wizard_tz:-Asia/Shanghai}   # 时区，来自安装/设置向导
     security_opt:
       - no-new-privileges:true
     networks:
@@ -27,7 +29,7 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "/etc/localtime:/etc/localtime:ro"                       # 同步宿主机时区
       - "${TRIM_PKGVAR}/traefik.yaml:/etc/traefik/traefik.yaml:ro"
-      - "${TRIM_PKGVAR}/dynamic:/etc/traefik/dynamic:ro"         # 动态配置（热加载）
+      - "${TRIM_DATA_SHARE_PATHS}/dynamic:/etc/traefik/dynamic:ro"   # 动态配置（向导生成 + 热加载）
       - "${TRIM_DATA_SHARE_PATHS}:/data"                         # 日志 / 证书 / 数据
       - "${TRIM_DATA_SHARE_PATHS}/certificates:/certificates:ro" # 自有证书放这里（见 README）
       # 如需直接挂载飞牛「证书中心」签发的证书，取消下一行并改为你的实际路径：

@@ -16,19 +16,34 @@
 - **通用服务目录**：内置 20+ 常见自建服务（Home Assistant / Emby / Gitea / AList / Vaultwarden 等）的可勾选反代模板。
 - **飞牛系统主页反代**：直接复用飞牛自身的 HTTP/HTTPS 端口（默认 5666/5667）经 Traefik 访问飞牛主页，无需额外暴露端口。
 - **HTTPS Only 开关**：一键将 HTTP(50080) 全量跳转至 HTTPS(50443)，默认关闭（HTTP / HTTPS 双入口并存）。
+- **安装向导**：安装与「设置」页面提供向导，覆盖飞牛系统端口、域名、HTTPS Only、远程 Dashboard 等启动必需项，自动写入配置，无需手改文件。
 
 ## 文件结构
 
 ```
-traefik/app/docker/
-├── docker-compose.yaml        # 容器编排（端口、挂载、网络）
-├── traefik.yaml               # 静态配置（入口 / API / Provider / 日志 / 可选插件）
-└── dynamic/
-    ├── middlewares.yml        # secure-headers（内嵌头）、basic-auth、可选中间件与 TLS Store
-    ├── dashboard.yml          # 远程 Dashboard 路由（50443 + BasicAuth）
-    ├── fnos.yml               # 飞牛系统主页反代（复用飞牛 HTTP/HTTPS 端口 5666/5667）
-    └── external-service.yml   # 反代「本机 / 局域网」非 Docker 应用的通用目录（默认注释）
+traefik/
+├── app/docker/
+│   ├── docker-compose.yaml        # 容器编排（端口、挂载、网络、时区）
+│   ├── traefik.yaml               # 静态配置（入口 / API / Provider / 日志 / 可选插件）
+│   ├── dynamic/                   # ⭐ 用户可编辑文件（首次安装时拷贝到数据目录，之后保留修改）
+│   │   ├── middlewares.yml        # secure-headers（内嵌头）、basic-auth、可选中间件与 TLS Store
+│   │   └── external-service.yml   # 反代「本机 / 局域网」非 Docker 应用的通用目录（默认注释）
+│   └── templates/                 # 向导模板（由 config_callback 渲染，生成下方动态配置）
+│       ├── fnos.yml.tpl          # 飞牛系统主页反代
+│       ├── dashboard.yml.tpl     # 远程 Dashboard 路由
+│       ├── auth.yml.tpl          # Dashboard BasicAuth
+│       └── redirect.yml.tpl      # HTTPS Only 跳转
+├── cmd/
+│   ├── config_callback           # 安装/设置后：依据向导输入生成动态配置
+│   ├── install_callback          # 安装后：调用 config_callback
+│   └── uninstall_callback        # 卸载后：按选择保留/删除数据
+└── wizard/                       # 安装 / 设置 / 卸载 向导
+    ├── install
+    ├── config
+    └── uninstall
 ```
+
+> **动态配置生成机制**：`fnos.yml` / `dashboard.yml` / `auth.yml` / `redirect.yml` 由安装/设置向导（而非手写）生成，写入飞牛**数据目录** `traefik/data/dynamic/`，由 Traefik file provider 热加载，无需重启。修改飞牛系统端口、域名、HTTPS Only、远程 Dashboard 等，在应用「设置」中改向导值即可，保存后自动重生成。
 
 ## 端口
 
@@ -45,6 +60,23 @@ traefik/app/docker/
 1. 在飞牛应用中心安装并启动本应用。
 2. 打开飞牛桌面中的 Traefik，即可访问 Dashboard（端口 8080）。
 3. 通过 `https://<飞牛IP>:50443` 访问被代理的服务（默认自签证书，浏览器提示不安全属正常现象）。
+4. 安装或首次启动后，建议进入应用「设置」确认**飞牛系统端口**与你的实际端口一致（见下「安装向导」）。
+
+## 安装向导（必需设置）
+
+安装与「设置」页面提供向导，覆盖启动本应用必须的配置项；这些项经 `config_callback` 自动写入动态配置，无需手动改文件。
+
+| 向导字段 | 默认值 | 说明 |
+|----------|--------|------|
+| 飞牛系统 HTTP 端口 | 5666 | 飞牛「设置 → 网络/常规」的 HTTP 端口（V0.8.22 起默认 5666，更早 8000）。用于反代飞牛主页。 |
+| 飞牛系统 HTTPS 端口 | 5667 | 同上，HTTPS 端口（V0.8.22 起 5667，更早 8001）。 |
+| 反代域名（可选） | 空 | 留空 = Traefik 作为兜底网关直接反代飞牛主页；填写 = 按 Host 匹配。 |
+| 时区 | Asia/Shanghai | 容器时区，影响日志时间。 |
+| 启用 HTTPS Only | 关 | 开 = HTTP(50080) 全量跳转 HTTPS(50443)；关 = 双入口并存。 |
+| 启用远程 Dashboard | 关 | 开 = 经 50443 + BasicAuth 远程访问 Dashboard，需设置账号密码。 |
+| Dashboard 账号 / 密码 | admin / 自定义 | 远程 Dashboard 的 BasicAuth 凭据（密码在飞牛侧不会回显）。 |
+
+> 修改任意向导项后保存，应用会自动重生成动态配置并热加载；仅静态 `traefik.yaml`（入口/Provider）不受影响，无需改动。
 
 ## 反代分类
 
@@ -53,21 +85,22 @@ traefik/app/docker/
 | 类别 | 反代对象 | 配置方式 |
 |------|----------|----------|
 | **A. Docker 应用** | 其它 FnOS 应用容器（运行在 Docker 中） | 由 Docker Provider **自动发现**（接入 `trim-default` 网络 + 打标签），无需手动写配置。见下方「反代其它 FnOS 应用容器」。 |
-| **B. 非 Docker 应用** | 飞牛系统本身、飞牛本机原生应用、局域网设备 | 文件式配置：`dynamic/fnos.yml`（飞牛系统主页）+ `dynamic/external-service.yml`（本机 / 局域网 / 通用目录）。 |
+| **B. 非 Docker 应用** | 飞牛系统本身、飞牛本机原生应用、局域网设备 | 配置式：`fnos.yml`（由向导生成的飞牛系统主页，复用飞牛 5666/5667）+ 文件式 `dynamic/external-service.yml`（本机 / 局域网 / 通用目录）。 |
 
 > 入口统一为 `50080`(HTTP) 与 `50443`(HTTPS)；是否强制 HTTPS 见「HTTPS Only 开关」。
 
 ### 飞牛系统主页反代（非 Docker · 特殊目标）
 
-飞牛系统在「设置 → 网络/常规」中可配置自身的 HTTP / HTTPS 端口（**V0.8.22 起默认 `5666` / `5667`**，更早公测版为 `8000` / `8001`）。本应用可直接复用这些端口，把飞牛主页也收编进 Traefik 统一入口：
+飞牛系统在「设置 → 网络/常规」中可配置自身的 HTTP / HTTPS 端口（**V0.8.22 起默认 `5666` / `5667`**，更早公测版为 `8000` / `8001`）。本应用可直接复用这些端口，把飞牛主页也收编进 Traefik 统一入口。
 
-- 配置文件：`dynamic/fnos.yml`（默认已写好，仅 Host 为占位域名）。
-- 启用：把 `rule` 的 `Host(\`fnos.your-domain.example\`)` 改成你的域名（或飞牛 IP），取消注释即可。
+- 该反代由**安装/设置向导自动生成**（`fnos.yml`），无需手改文件。
+- 在向导填写「飞牛系统 HTTP/HTTPS 端口」即可（默认 5666/5667；若你在飞牛设置中改过系统端口，请同步改向导值）。
+- 「反代域名」留空时，Traefik 作为兜底网关直接反代飞牛主页（经 50080 / 50443 均可访问）；填写域名后按 Host 匹配。
   - `50080` → 转发到飞牛 HTTP 端口（默认 `5666`）
   - `50443` → 转发到飞牛 HTTPS 端口（默认 `5667`，自签证书，已跳过校验）
-- 远程经 `50443` 访问会叠加 `basic-auth` 密码保护。
+- 若同时开启了「远程 Dashboard」，远程经 `50443` 访问飞牛主页会叠加 `dash-auth` 密码保护。
 
-> 若你在飞牛设置中修改过系统端口，请同步改 `fnos.yml` 里的 `5666` / `5667` 两个数字（端口值来自社区整理的 NAS 默认端口表，请以你飞牛设置中的实际值为准）。
+> 端口默认值来自社区整理的 NAS 默认端口表，请以你飞牛「设置 → 网络/常规」中的实际值为准。
 
 ## 配置
 
@@ -128,7 +161,9 @@ http:
 
 ### 修改 Dashboard 远程访问密码
 
-`websecure`（50443）上的 Dashboard 受 BasicAuth 保护。请生成自己的哈希并替换 `dynamic/middlewares.yml` 中 `basic-auth` 的值：
+远程 Dashboard（经 `50443`）受 BasicAuth 保护，其账号密码在**安装/设置向导**中设置（「启用远程 Dashboard」+ 账号/密码）。修改后保存即生效，哈希由应用自动生成（`auth.yml`）。
+
+若你还需要对 `external-service.yml` 中的**其它服务**做 BasicAuth 保护，可在 `dynamic/middlewares.yml` 的 `basic-auth` 中填入自己的哈希（生成方式）：
 
 ```bash
 htpasswd -nbB 用户名 密码
@@ -159,25 +194,13 @@ Traefik 已通过 `forwardedHeaders.trustedIPs` 信任内网网段的 `X-Forward
 
 > 注意：官方 `traefik:latest` 镜像不含 Go 构建环境，本地插件需在构建镜像时预编译插件，否则会启动失败。生产环境建议用 `forwardedHeaders` 方案，仅在对 `X-Real-IP` 有强需求时启用插件。
 
-### HTTPS Only 开关（可选）
+### HTTPS Only 开关
 
 默认情况下，应用**同时提供 HTTP(50080) 与 HTTPS(50443) 两个入口**，局域网明文访问可用。
 
-若希望**仅保留 HTTPS（强制加密）**，开启「HTTPS Only」：
+若希望**仅保留 HTTPS（强制加密）**，在向导中开启「启用 HTTPS Only」开关（或应用「设置」中修改）。开启后应用会自动生成 `redirect.yml`：所有经 `50080`(HTTP) 的访问被 `301` 跳转至 `50443`(HTTPS)，HTTP 入口不再直出内容。
 
-1. 打开 `traefik.yaml`，在 `entryPoints.web.http` 下取消 `middlewares` 注释：
-
-   ```yaml
-   web:
-     address: ":50080"
-     http:
-       middlewares:
-         - redirect-to-https@file   # 开启后：所有 50080(HTTP) 访问 301 跳转至 50443(HTTPS)
-   ```
-
-2. 保存后 Traefik 自动热加载。此后所有经 `50080`(HTTP) 的访问将被 `301` 跳转至 `50443`(HTTPS)。
-
-> **50443 为独立定义的 HTTPS 端口**；关闭本开关（保持注释）即恢复 HTTP / HTTPS 双入口并存。该跳转即 `redirect-to-https` 中间件，由 `web` 入口统一引用，无需逐条路由配置。
+> **50443 为独立定义的 HTTPS 端口**。关闭开关即恢复 HTTP / HTTPS 双入口并存。该行为由 `redirect-to-https` 中间件实现，无需逐条路由配置，也无需手动改 `traefik.yaml`。
 
 ## 使用建议
 

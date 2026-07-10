@@ -1,5 +1,79 @@
 #!/bin/bash
+# config_callback —— 依据安装/设置向导输入，生成 Traefik 动态配置到可写数据目录。
+#
+# 运行时模型：
+#   ${TRIM_PKGVAR}          = 包内 app/docker（只读），含 traefik.yaml / dynamic/ / templates/
+#   ${TRIM_DATA_SHARE_PATHS}= 可写数据目录（file provider 热加载来源）
+# 生成的 dynamic/ 由 Traefik file provider 自动热加载，无需重启容器。
+# 本脚本同时被 install_callback（安装后）与 config_callback（设置变更后）调用。
 
-### This script is called after the user change environment variables in application setting page.
+set -euo pipefail
+
+PKG_DOCKER="${TRIM_PKGVAR}"                          # 包内 app/docker（只读）
+TPL="${PKG_DOCKER}/templates"
+OUT="${TRIM_DATA_SHARE_PATHS}/dynamic"               # 可写数据目录
+mkdir -p "${OUT}"
+
+# ── 读取向导变量（带默认值）──
+DOMAIN="${wizard_domain:-}"
+FNOS_HTTP_PORT="${wizard_fnos_http_port:-5666}"
+FNOS_HTTPS_PORT="${wizard_fnos_https_port:-5667}"
+HTTPS_ONLY="${wizard_https_only:-false}"
+DASH_ENABLE="${wizard_dashboard_enable:-false}"
+DASH_USER="${wizard_dashboard_user:-admin}"
+DASH_PASS="${wizard_dashboard_pass:-}"
+
+# FnOS 路由规则：有域名则按 Host 匹配，否则兜底（无 rule = 匹配所有请求）
+if [ -n "${DOMAIN}" ]; then
+  FNOS_RULE="rule: Host(\`${DOMAIN}\`)"
+else
+  FNOS_RULE=""
+fi
+
+# ── 首次安装：把用户可编辑文件从包内拷贝到数据目录（之后保留用户修改，不被覆盖）──
+seed() {
+  local name
+  name="$(basename "$1")"
+  if [ ! -f "${OUT}/${name}" ]; then
+    cp "$1" "${OUT}/${name}"
+  fi
+}
+seed "${PKG_DOCKER}/dynamic/middlewares.yml"
+seed "${PKG_DOCKER}/dynamic/external-service.yml"
+
+# ── 渲染模板：将占位符替换为向导值 ──
+render() {
+  local src="$1" dst="$2"
+  sed -e "s|__FNOS_HTTP_PORT__|${FNOS_HTTP_PORT}|g" \
+      -e "s|__FNOS_HTTPS_PORT__|${FNOS_HTTPS_PORT}|g" \
+      -e "s|__FNOS_RULE__|${FNOS_RULE}|g" \
+      -e "s|__DASH_USER__|${DASH_USER}|g" \
+      -e "s|__DASH_HASH__|${DASH_HASH:-}|g" \
+      "${src}" > "${dst}"
+}
+
+# 飞牛系统主页反代（始终生成）
+render "${TPL}/fnos.yml.tpl" "${OUT}/fnos.yml"
+
+# HTTPS Only 跳转（仅开启时生成，关闭时删除）
+if [ "${HTTPS_ONLY}" = "true" ]; then
+  render "${TPL}/redirect.yml.tpl" "${OUT}/redirect.yml"
+else
+  rm -f "${OUT}/redirect.yml"
+fi
+
+# 远程 Dashboard（仅启用且提供密码时生成；否则清理）
+if [ "${DASH_ENABLE}" = "true" ] && [ -n "${DASH_PASS}" ]; then
+  HASH="$(openssl passwd -apr1 "${DASH_PASS}" 2>/dev/null || true)"
+  if [ -n "${HASH}" ]; then
+    DASH_HASH="${HASH}" render "${TPL}/auth.yml.tpl" "${OUT}/auth.yml"
+    render "${TPL}/dashboard.yml.tpl" "${OUT}/dashboard.yml"
+  else
+    echo "openssl 不可用，无法生成 Dashboard 密码哈希，已跳过远程 Dashboard 路由。" > "${TRIM_TEMP_LOGFILE:-/dev/null}"
+    rm -f "${OUT}/dashboard.yml" "${OUT}/auth.yml"
+  fi
+else
+  rm -f "${OUT}/dashboard.yml" "${OUT}/auth.yml"
+fi
 
 exit 0
