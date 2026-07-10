@@ -24,7 +24,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "docker",
     "isdocker": "true",
-    "size": "500MB",
+    "size": "150KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/v2.14.2/MoviePilot.fpk",
     "changelog": "更新镜像至ghcr.io/narrator-z/moviepilot:latest"
   }
 }
