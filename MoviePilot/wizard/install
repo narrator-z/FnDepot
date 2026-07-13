@@ -1,27 +1,39 @@
 [
   {
-    "stepTitle": "管理员账号",
+    "stepTitle": "创建管理员账号",
     "items": [
       {
         "type": "text",
-        "field": "wizard_moviepilot_admin_username",
+        "field": "moviepilot_admin_username",
         "label": "管理员用户名",
         "initValue": "admin",
         "rules": [
           { "required": true, "message": "请输入管理员用户名" },
-          { "pattern": "^[a-zA-Z0-9_]+$", "message": "只能包含字母、数字和下划线" }
+          { "pattern": "^[a-zA-Z0-9_]+$", "message": "用户名只能包含字母、数字和下划线" }
         ]
       },
       {
         "type": "password",
-        "field": "wizard_moviepilot_admin_password",
+        "field": "moviepilot_admin_password",
         "label": "管理员密码",
-        "initValue": "",
         "rules": [
           { "required": true, "message": "请输入管理员密码" },
-          { "min": 8, "message": "密码长度不能少于 8 位" }
+          { "min": 8, "message": "密码长度不能少于8位" }
         ]
       }
+    ]
+  },
+  {
+    "stepTitle": "应用端口",
+    "items": [
+      { "type": "tips", "helpText": "前端端口：20669" },
+      { "type": "tips", "helpText": "后端端口：47901" }
+    ]
+  },
+  {
+    "stepTitle": "注意事项",
+    "items": [
+      { "type": "tips", "helpText": "⚠️提示：安装失败时请检查 Docker 站点的连接性，镜像下载失败请配置镜像代理。" }
     ]
   }
 ]

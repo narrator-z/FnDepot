@@ -4,10 +4,10 @@
       "title": "MoviePilot",
       "icon": "images/icon_{0}.png",
       "type": "url",
-      "protocol": "http",
-      "port": "47901",
+      "protocol": "",
+      "port": "20669",
       "url": "/",
-      "allUsers": true
+      "allUsers": false
     }
   }
 }

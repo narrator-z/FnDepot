@@ -7,9 +7,9 @@ services:
     hostname: moviepilot-v2
     network_mode: host
     volumes:
-      - '${TRIM_PKGVAR}/media:/media'
-      - '${TRIM_PKGVAR}/config:/config'
-      - '${TRIM_PKGVAR}/core:/moviepilot/.cache/ms-playwright'
+      - './media:/media'
+      - './moviepilot-v2/config:/config'
+      - './moviepilot-v2/core:/moviepilot/.cache/ms-playwright'
       - '/var/run/docker.sock:/var/run/docker.sock:ro'
     environment:
       - 'NGINX_PORT=20669'
