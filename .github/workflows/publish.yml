@@ -18,6 +18,14 @@ on:
       - 'MoviePilot/**'
       - 'scripts/build_fpk.sh'
       - '.github/workflows/publish.yml'
+  # 手动触发：在 Actions 页点 “Run workflow”。
+  # force_app 留空 = 按版本变更自动判断；填 all = 强制重建全部；填具体应用名 = 强制重建该应用。
+  workflow_dispatch:
+    inputs:
+      force_app:
+        description: '强制发布的应用名（留空=按版本变更自动判断；all=强制全部重建；或填 traefik / MoviePilot）'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -41,17 +49,17 @@ jobs:
           AFTER: ${{ github.event.after }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
+          FORCE_APP: ${{ github.event.inputs.force_app }}
         run: |
           set -euo pipefail
           command -v jq >/dev/null 2>&1 || { echo "jq is required"; exit 1; }
 
           # 首次推送到空仓库时无法比对版本，直接跳过，避免误发版
-          if [[ "$BEFORE" =~ ^0+$ ]]; then
+          if [[ -z "${FORCE_APP:-}" && "$BEFORE" =~ ^0+$ ]]; then
             echo "::notice::Initial repository push detected — skipping auto-publish"
             exit 0
           fi
 
-          CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null || git ls-files)
           APPS=$(jq -r 'keys[]' fnpack.json)
           BUILD_DIR=$(mktemp -d)
           NEEDS_COMMIT=false
@@ -61,11 +69,26 @@ jobs:
             PREV=$(git show "$BEFORE:fnpack.json" 2>/dev/null | jq -r --arg a "$APP" '.[$a].version // empty' || true)
             CUR=$(jq -r --arg a "$APP" '.[$a].version // empty' fnpack.json)
 
-            if [[ -z "$CUR" || "$PREV" == "$CUR" ]]; then
+            VERSION_CHANGED=false
+            if [[ -n "$CUR" && "$PREV" != "$CUR" ]]; then
+              VERSION_CHANGED=true
+            fi
+
+            # 强制模式：force_app=all 或精确匹配应用名
+            FORCE_THIS=false
+            if [[ -n "${FORCE_APP:-}" ]]; then
+              if [[ "$FORCE_APP" == "all" || "$FORCE_APP" == "$APP" ]]; then
+                FORCE_THIS=true
+              fi
+            fi
+
+            if [[ "$VERSION_CHANGED" != "true" && "$FORCE_THIS" != "true" ]]; then
               echo "::notice::$APP version unchanged ($CUR) — skip"
               continue
             fi
-            echo "::notice::$APP version changed: $PREV -> $CUR — publishing"
+            REASON="version changed"
+            [[ "$FORCE_THIS" == "true" ]] && REASON="forced"
+            echo "::notice::$APP publishing ($REASON): $PREV -> $CUR"
 
             # 从当前源码重建 fpk
             bash scripts/build_fpk.sh "$APP" "$BUILD_DIR" all
