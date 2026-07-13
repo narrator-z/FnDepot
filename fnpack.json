@@ -10,8 +10,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "79.53KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.0.2/traefik_all.fpk",
+    "size": "79.58KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.0.3/traefik_all.fpk",
     "changelog": "同步 manifest 版本至 1.0.3，修正 maintainer/distributor 为 narrator-z，补全 install_type"
   },
   "MoviePilot": {
@@ -25,8 +25,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.76KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.4/MoviePilot_all.fpk",
+    "size": "21.79KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.5/MoviePilot_all.fpk",
     "changelog": "同步 manifest 版本至 2.14.5，修正 install_type"
   }
 }
