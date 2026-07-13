@@ -1,0 +1,9 @@
+#!/bin/bash
+# 安装后回调：将管理员凭据写入 docker/.env（compose 自动加载）
+DOCKER_DIR="${TRIM_APPDEST}/docker"
+mkdir -p "${DOCKER_DIR}"
+cat > "${DOCKER_DIR}/.env" <<EOF
+moviepilot_admin_username=${wizard_moviepilot_admin_username:-admin}
+moviepilot_admin_password=${wizard_moviepilot_admin_password:-changeme123}
+EOF
+exit 0

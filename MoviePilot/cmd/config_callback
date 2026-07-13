@@ -1,0 +1,19 @@
+#!/bin/bash
+# 配置变更后：合并凭据并写回 docker/.env（密码留空则保留原值）
+DOCKER_DIR="${TRIM_APPDEST}/docker"
+mkdir -p "${DOCKER_DIR}"
+USER="admin"; PASS=""
+[ -f "${DOCKER_DIR}/.env" ] && . "${DOCKER_DIR}/.env"
+[ -n "${wizard_moviepilot_admin_username}" ] && USER="${wizard_moviepilot_admin_username}"
+if [ -n "${wizard_moviepilot_admin_password}" ]; then
+  PASS="${wizard_moviepilot_admin_password}"
+elif [ -n "${moviepilot_admin_password}" ]; then
+  PASS="${moviepilot_admin_password}"
+else
+  PASS="changeme123"
+fi
+cat > "${DOCKER_DIR}/.env" <<EOF
+moviepilot_admin_username=${USER}
+moviepilot_admin_password=${PASS}
+EOF
+exit 0

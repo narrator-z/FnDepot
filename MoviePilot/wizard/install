@@ -1,0 +1,27 @@
+[
+  {
+    "stepTitle": "管理员账号",
+    "items": [
+      {
+        "type": "text",
+        "field": "wizard_moviepilot_admin_username",
+        "label": "管理员用户名",
+        "initValue": "admin",
+        "rules": [
+          { "required": true, "message": "请输入管理员用户名" },
+          { "pattern": "^[a-zA-Z0-9_]+$", "message": "只能包含字母、数字和下划线" }
+        ]
+      },
+      {
+        "type": "password",
+        "field": "wizard_moviepilot_admin_password",
+        "label": "管理员密码",
+        "initValue": "",
+        "rules": [
+          { "required": true, "message": "请输入管理员密码" },
+          { "min": 8, "message": "密码长度不能少于 8 位" }
+        ]
+      }
+    ]
+  }
+]

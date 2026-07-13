@@ -1,0 +1,24 @@
+version: '3.3'
+services:
+  moviepilot:
+    stdin_open: true
+    tty: true
+    container_name: moviepilot-v2
+    hostname: moviepilot-v2
+    network_mode: host
+    volumes:
+      - '${TRIM_PKGVAR}/media:/media'
+      - '${TRIM_PKGVAR}/config:/config'
+      - '${TRIM_PKGVAR}/core:/moviepilot/.cache/ms-playwright'
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+    environment:
+      - 'NGINX_PORT=20669'
+      - 'PORT=47901'
+      - 'PUID=0'
+      - 'PGID=0'
+      - 'UMASK=000'
+      - 'TZ=Asia/Shanghai'
+      - 'SUPERUSER=${moviepilot_admin_username}'
+      - 'SUPERUSER_PASSWORD=${moviepilot_admin_password}'
+    restart: always
+    image: ghcr.io/narrator-z/moviepilot:latest

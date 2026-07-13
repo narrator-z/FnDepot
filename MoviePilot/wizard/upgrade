@@ -1,0 +1,11 @@
+[
+  {
+    "stepTitle": "升级 MoviePilot",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "即将升级 MoviePilot，配置文件与数据将保留。"
+      }
+    ]
+  }
+]

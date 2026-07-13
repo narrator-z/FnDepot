@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "desc": "轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。",
     "labels": "反向代理,负载均衡,网络工具",
-    "distributor": "narratorz",
+    "distributor": "narrator-z",
     "distributor_url": "https://github.com/narrator-z/FnDepot",
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
@@ -25,8 +25,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "150KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/v2.14.2/MoviePilot.fpk",
+    "size": "22.05KB",
+    "download_url": "https://raw.githubusercontent.com/narrator-z/FnDepot/master/MoviePilot/MoviePilot_all.fpk",
     "changelog": "更新镜像至ghcr.io/narrator-z/moviepilot:latest"
   }
 }

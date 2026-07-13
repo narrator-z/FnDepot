@@ -1,0 +1,16 @@
+[
+  {
+    "stepTitle": "重置管理员密码",
+    "items": [
+      {
+        "type": "password",
+        "field": "wizard_moviepilot_admin_password",
+        "label": "新管理员密码（留空则保持原密码）",
+        "initValue": "",
+        "rules": [
+          { "min": 8, "message": "密码长度不能少于 8 位" }
+        ]
+      }
+    ]
+  }
+]

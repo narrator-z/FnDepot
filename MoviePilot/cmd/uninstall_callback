@@ -1,0 +1,6 @@
+#!/bin/bash
+# 卸载后：按用户在卸载向导中的选择清理数据
+if [ "$wizard_data_action" = "delete" ]; then
+  rm -rf "${TRIM_PKGVAR}" "${TRIM_DATA_SHARE_PATHS}"
+fi
+exit 0
