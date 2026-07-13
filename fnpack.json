@@ -25,7 +25,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.79KB",
+    "size": "21.68KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.7/MoviePilot_all.fpk",
     "changelog": "修复 16001：对齐 UCKETX 可工作配置（install_init/权限/data-share/manifest 字段），镜像不变"
   }
