@@ -1,9 +1,9 @@
 name: Auto Publish FnDepot Apps
 
-# 当某个应用的版本（fnpack.json 中的 version）发生变更并推送到 master 时，
+# 当某个应用的版本（fnpack.json 中的 version）发生变更并推送到 main 时，
 # 自动从源码重建对应的 .fpk、更新 fnpack.json 的 size / download_url，
 # 提交回仓库（[skip ci] 防止循环），并为该版本创建 GitHub Release（附带 fpk）。
-# 其中 download_url 始终指向该版本「固定」的 Release 资产链接（可回滚、不随 master 漂移）。
+# 其中 download_url 始终指向该版本「固定」的 Release 资产链接（可回滚、不随分支漂移）。
 #
 # 设计要点：
 #   - 仅在「版本号变更」时发布，避免把未发版的源码改动（WIP）提前发布。
@@ -12,7 +12,7 @@ name: Auto Publish FnDepot Apps
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - 'fnpack.json'
       - 'traefik/**'
@@ -113,7 +113,7 @@ jobs:
           done
 
           # 为版本变更创建 GitHub Release（tag 已存在则复用），并将 download_url
-          # 统一改写为该版本「固定」的 Release 资产链接（可回滚、不随 master 漂移）。
+          # 统一改写为该版本「固定」的 Release 资产链接（可回滚、不随分支漂移）。
           for R in "${RELEASES[@]:-}"; do
             [[ -z "$R" ]] && continue
             IFS='|' read -r APP VER CL FPK <<< "$R"
