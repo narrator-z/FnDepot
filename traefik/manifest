@@ -1,5 +1,5 @@
 appname               = traefik
-version               = 1.1.0
+version               = 1.1.1
 display_name          = Traefik 反向代理
 desc                  = 轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。飞牛(FnOS) 通用版：默认 80/443 入口、基础域名必填、支持自签/自有证书/Let's Encrypt(ACME) 三种 TLS 模式，可反代飞牛本机与局域网服务。
 source                = thirdparty
@@ -15,5 +15,5 @@ service_port          = 8080
 disable_authorization_path = false
 desktop_uidir         = ui
 desktop_applaunchname = traefik.Application
-changelog             = 修复安装失败(16001)：移除 os_max_version/checkport；入口端口改为 80/443（可在向导修改）；基础域名改为必填；新增 TLS 三种模式（自签/自有证书/ACME）；去除依赖外部网络 trim-default
+changelog             = 修复安装失败(10266 invalid spec: too many colons)：compose 卷改为整块 ${TRIM_DATA_SHARE_PATHS}:/data 挂载（禁止 ${VAR}/子路径 写法）；静态配置统一生成到 /data（traefik.yaml/dynamic/certificates/acme.json）；config_callback 改用 TRIM_APPDEST 读取包内文件并修正 ACME CA(prod/staging) 注入
 install_dep_apps      =

@@ -1,19 +1,30 @@
 #!/bin/bash
-# config_callback —— 依据安装/设置向导输入，生成 Traefik 动态配置到可写数据目录。
+# config_callback —— 依据安装/设置向导输入，生成 Traefik 配置到共享数据目录。
 #
-# 运行时模型：
-#   ${TRIM_PKGVAR}          = 包内 app/docker（只读），含 traefik.yaml / dynamic/ 模板 / templates/
-#   ${TRIM_DATA_SHARE_PATHS}= 可写数据目录（file provider 热加载来源）
-# 生成的内容由 Traefik file provider 自动热加载，无需重启容器。
+# 运行时模型（见 fn-fpk 规范 §9.1）：
+#   ${TRIM_APPDEST}         = 包内代码目录（target，只读），含 docker/traefik.yaml 与 docker/dynamic/ 种子
+#   ${TRIM_DATA_SHARE_PATHS}= 可写共享目录（冒号分隔，取首个），容器内挂载为 /data
+# 生成/拷贝的内容统一落在 $DATA 下，由 Traefik file provider 热加载，无需重启容器。
 # 本脚本同时被 install_callback（安装后）与 config_callback（设置变更后）调用。
 
 set -euo pipefail
 
-PKG_DOCKER="${TRIM_PKGVAR}"                          # 包内 app/docker（只读）
-TPL="${PKG_DOCKER}/templates"
-OUT="${TRIM_DATA_SHARE_PATHS}/dynamic"              # 可写数据目录
-mkdir -p "${OUT}"
-mkdir -p "${TRIM_DATA_SHARE_PATHS}/certificates"
+# ── 定位包内 docker 目录（优先 TRIM_APPDEST，兼容回退 TRIM_PKGVAR）──
+PKG_DOCKER=""
+for cand in "${TRIM_APPDEST}/docker" "${TRIM_PKGVAR}/docker" "${TRIM_APPDEST}" "${TRIM_PKGVAR}"; do
+  if [ -d "$cand" ] && { [ -f "$cand/traefik.yaml" ] || [ -f "$cand/dynamic/external-service.yml" ]; }; then
+    PKG_DOCKER="$cand"
+    break
+  fi
+done
+if [ -z "$PKG_DOCKER" ]; then
+  echo "找不到包内 docker 目录（TRIM_APPDEST=$TRIM_APPDEST, TRIM_PKGVAR=$TRIM_PKGVAR）" > "${TRIM_TEMP_LOGFILE:-/dev/null}"
+  exit 1
+fi
+
+# ── 共享数据目录（取首个路径，避免冒号列表在挂载时产生多冒号）──
+DATA="${TRIM_DATA_SHARE_PATHS%%:*}"
+mkdir -p "${DATA}/dynamic" "${DATA}/certificates" "${DATA}/data"
 
 # ── 读取向导变量（带默认值）──
 DOMAIN="${wizard_domain:-}"
@@ -28,12 +39,22 @@ DASH_ENABLE="${wizard_dashboard_enable:-false}"
 DASH_USER="${wizard_dashboard_user:-admin}"
 DASH_PASS="${wizard_dashboard_pass:-}"
 
+# 把包内静态配置拷到共享目录，并填入 ACME CA 地址（prod/staging）
+if [ -f "$PKG_DOCKER/traefik.yaml" ]; then
+  cp -f "$PKG_DOCKER/traefik.yaml" "${DATA}/traefik.yaml"
+  CASERVER="https://acme-v02.api.letsencrypt.org/directory"
+  if [ "${ACME_CA}" = "staging" ]; then
+    CASERVER="https://acme-staging-v02.api.letsencrypt.org/directory"
+  fi
+  # 兼容 GNU/BSD sed 的就地替换
+  sed -i "s#__ACME_CASERVER__#${CASERVER}#g" "${DATA}/traefik.yaml"
+fi
+
 # 提取注册域（最后两段）用于 ACME 泛域名 SAN：nas.example.com -> example.com
 regdomain() {
   local d="$1"
   local oifs="$IFS"; IFS='.'; set -- $d; IFS="$oifs"
   if [ "$#" -ge 2 ]; then
-    eval "echo \"\$((\$#-1)):\$*\"" >/dev/null 2>&1 || true
     local n=$#; local penult; local last
     eval "penult=\$$((n-1))"; eval "last=\$$n"
     echo "${penult}.${last}"
@@ -43,8 +64,7 @@ regdomain() {
 }
 WILDCARD="*.$(regdomain "${DOMAIN}")"
 
-# 静态 traefik.yaml 里的 websecure entrypoint 默认 tls:{}（自签）。
-# 路由层面的 TLS 声明按模式决定（基准缩进 6 空格，与 entryPoints/service 同级）：
+# 路由层面的 TLS 声明（基准缩进 6 空格，与 entryPoints/service 同级）：
 if [ "${TLS_MODE}" = "acme" ] && [ -n "${DOMAIN}" ]; then
   ROUTE_TLS="$(cat <<EOF
       tls:
@@ -58,6 +78,8 @@ EOF
 else
   ROUTE_TLS="      tls: {}"
 fi
+
+OUT="${DATA}/dynamic"
 
 # ── 1) 中间件（secure-headers 必选；basic-auth 占位；custom 模式加载自有证书 TLS Store）──
 {
@@ -94,8 +116,8 @@ if [ "${TLS_MODE}" = "custom" ]; then
     echo "  stores:"
     echo "    default:"
     echo "      defaultCertificate:"
-    echo "        certFile: \"/certificates/${CERT_FILE}\""
-    echo "        keyFile: \"/certificates/${KEY_FILE}\""
+    echo "        certFile: \"/data/certificates/${CERT_FILE}\""
+    echo "        keyFile: \"/data/certificates/${KEY_FILE}\""
   } >> "${OUT}/middlewares.yml"
 fi
 
@@ -200,10 +222,16 @@ fi
 seed() {
   local name
   name="$(basename "$1")"
-  if [ ! -f "${OUT}/${name}" ]; then
+  if [ ! -f "${OUT}/${name}" ] && [ -f "$1" ]; then
     cp "$1" "${OUT}/${name}"
   fi
 }
 seed "${PKG_DOCKER}/dynamic/external-service.yml"
+
+# ── 6) ACME 证书存储文件权限（Traefik 要求 600）──
+if [ "${TLS_MODE}" = "acme" ]; then
+  touch "${DATA}/acme.json" 2>/dev/null || true
+  chmod 600 "${DATA}/acme.json" 2>/dev/null || true
+fi
 
 exit 0

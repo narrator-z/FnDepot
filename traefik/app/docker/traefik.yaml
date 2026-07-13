@@ -42,8 +42,9 @@ certificatesResolvers:
     acme:
       email: ${ACME_EMAIL:-admin@example.com}
       storage: /data/acme.json
-      # caServer 留空则用 Let's Encrypt 生产环境；可在向导选择 staging 进行调试。
-      caServer: ${ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}
+      # caServer 由 config_callback 按向导选择(prod/staging)填入 __ACME_CASERVER__ 占位符；
+      # 非 ACME 模式本 resolver 不被任何路由引用，此项不影响启动。
+      caServer: __ACME_CASERVER__
       # HTTP-01 挑战：使用 80 入口，需 80 端口对外可达（默认即如此）。
       httpChallenge:
         entryPoint: web
@@ -54,11 +55,11 @@ providers:
     exposedByDefault: false        # 仅代理显式打 traefik.enable=true 标签的容器
     network: trim-default          # 飞牛应用共享网络；取该网络 IP 作为后端地址，实现跨网段反代
   file:
-    directory: "/etc/traefik/dynamic"
-    watch: true                    # 热加载动态配置（新增反代无需重启 Traefik）
+    directory: "/data/dynamic"     # 动态配置目录（共享目录挂载为 /data，由向导生成 + 热加载）
+    watch: true
 
 log:
   level: INFO
-  filePath: "/data/traefik.log"    # 日志写入飞牛共享目录 traefik/data
+  filePath: "/data/traefik.log"    # 日志写入共享目录 /data
 
 accessLog: true

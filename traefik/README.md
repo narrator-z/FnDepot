@@ -10,7 +10,7 @@
 - **基础域名必填**：安装向导要求填写基础域名（如 `nas.example.com`），用于 TLS 证书(ACME 的 SAN)与反代路由的 Host 匹配。
 - **三种 TLS 模式**：
   - **自签证书**（默认）：Traefik 自动生成自签证书，开箱即用，浏览器会提示不受信任；
-  - **自有证书**：把 `cert/key` 放到数据目录 `certificates/` 下，作为默认证书对所有 HTTPS 域名生效；
+  - **自有证书**：把 `cert/key` 放到飞牛共享目录 `traefik/certificates/` 下（容器内 `/data/certificates`，由 config_callback 自动加载为默认证书），对所有 HTTPS 域名生效；
   - **Let's Encrypt (ACME)**：自动申请可信证书，支持 HTTP-01 挑战（需 80 端口对外可达），可选 Staging 环境调试。
 - **自动化服务发现**：对接 Docker provider，仅代理显式打 `traefik.enable=true` 标签的容器，启停后自动更新路由（需将容器连接到 `traefik` 网络，见下文）。
 - **内置 Dashboard**：可视化控制面板，飞牛桌面经 `8080` 端口内网直连访问；亦支持经 `443` + BasicAuth 远程访问。
@@ -151,7 +151,7 @@ http:
 
 ### 使用自有证书（可选）
 
-1. 将证书 `your-domain.crt` / `your-domain.key` 放入飞牛共享目录 `traefik/data/certificates/`。
+1. 将证书 `your-domain.crt` / `your-domain.key` 放入飞牛共享目录 `traefik/certificates/`（容器内 `/data/certificates`）。
 2. 取消 `dynamic/middlewares.yml` 中 `tls.stores.default.defaultCertificate` 注释并填好文件名。
 3. 证书将作为默认证书对所有 `443` 域名自动生效。
 
