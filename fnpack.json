@@ -25,7 +25,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.79KB",
+    "size": "21.93KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.6/MoviePilot_all.fpk",
     "changelog": "修复安装失败(16001)：compose 改用相对路径、向导变量去前缀、UI 端口改 20669"
   }
