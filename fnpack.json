@@ -2,7 +2,7 @@
   "traefik": {
     "display_name": "Traefik 反向代理",
     "platform": "all",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "desc": "轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。",
     "labels": "反向代理,负载均衡,网络工具",
     "distributor": "narrator-z",
@@ -12,12 +12,12 @@
     "isdocker": "true",
     "size": "79.53KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.0.2/traefik_all.fpk",
-    "changelog": "接入自动发布工作流并验证 Release 发版链路"
+    "changelog": "同步 manifest 版本至 1.0.3，修正 maintainer/distributor 为 narrator-z，补全 install_type"
   },
   "MoviePilot": {
     "display_name": "MoviePilot",
     "platform": "all",
-    "version": "2.14.4",
+    "version": "2.14.5",
     "desc": "NAS媒体库自动化管理工具，基于Jackett和Plex",
     "labels": "媒体,自动化,下载",
     "distributor": "narrator-z",
@@ -27,6 +27,6 @@
     "isdocker": "true",
     "size": "21.76KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.4/MoviePilot_all.fpk",
-    "changelog": "接入自动发布工作流并验证 Release 发版链路"
+    "changelog": "同步 manifest 版本至 2.14.5，修正 install_type"
   }
 }
