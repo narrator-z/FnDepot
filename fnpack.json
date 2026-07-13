@@ -2,8 +2,8 @@
   "traefik": {
     "display_name": "Traefik 反向代理",
     "platform": "all",
-    "version": "1.0.3",
-    "desc": "轻量级、高性能的开源反向代理和负载均衡器，支持 Docker、Kubernetes 等多种后端，提供自动化服务发现和路由。",
+    "version": "1.1.0",
+    "desc": "轻量级、高性能的开源反向代理和负载均衡器。飞牛通用版：默认 80/443 入口、基础域名必填、支持自签/自有证书/Let's Encrypt(ACME) 三种 TLS 模式。",
     "labels": "反向代理,负载均衡,网络工具",
     "distributor": "narrator-z",
     "distributor_url": "https://github.com/narrator-z/FnDepot",
@@ -11,8 +11,8 @@
     "install_type": "系统空间",
     "isdocker": "true",
     "size": "79.58KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.0.3/traefik_all.fpk",
-    "changelog": "同步 manifest 版本至 1.0.3，修正 maintainer/distributor 为 narrator-z，补全 install_type"
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.1.0/traefik_all.fpk",
+    "changelog": "修复安装失败(16001)：移除 os_max_version/checkport；入口端口改 80/443（向导可改）；基础域名必填；新增 TLS 三种模式（自签/自有证书/ACME）；去除依赖外部网络"
   },
   "MoviePilot": {
     "display_name": "MoviePilot",

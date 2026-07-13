@@ -1,6 +1,12 @@
-# Traefik 静态配置（飞牛通用优化版）
-# 参考：ref/traefik-proxy/config/traefik/traefik.yml
-# 说明：已去除个性化域名/证书路径，全部改为通用占位与注释。
+# Traefik 静态配置（飞牛通用版）
+# 说明：
+#   - 入口 80(HTTP) / 443(HTTPS)，HTTPS 默认使用 Traefik 自动生成的自签证书。
+#   - 若选择「自有证书」：把 cert/key 放到数据目录 certificates/ 下，
+#     由 dynamic/middlewares.yml 中的 TLS Store 加载为默认证书。
+#   - 若选择「ACME(Let's Encrypt)」：路由在 dynamic 配置中声明
+#     `tls.certResolver: letsencrypt` 即可，下方 certificatesResolvers 已就绪。
+#     ACME_EMAIL / ACME_CASERVER 由 compose 环境变量注入（来自安装向导）。
+#     非 ACME 模式这两个变量为空，resolver 不会被任何路由引用，不影响启动。
 
 global:
   checkNewVersion: false      # 内网环境无需检查更新
@@ -11,17 +17,13 @@ api:
   insecure: true              # 飞牛桌面经 8080 端口内网直连 Dashboard（LAN 环境可接受）
 
 entryPoints:
-  # 入口端口：避开飞牛系统占用的 80/443，改用高位端口，避免端口冲突导致无法启动。
-  #   web       = HTTP  入口（50080）
-  #   websecure = HTTPS 入口（50443，独立定义）
   web:
-    address: ":50080"
+    address: ":80"
     # HTTP 入口；是否强制跳转 HTTPS 由动态配置 dynamic/redirect.yml 控制（「HTTPS Only」开关，向导生成）。
   websecure:
-    address: ":50443"
+    address: ":443"
     forwardedHeaders:
       # 信任以下网段的 X-Forwarded-*，使后端服务拿到真实客户端 IP。
-      # 若你的服务位于上方网段之外（例如有公网反代层），请在此追加对应 IP/段。
       trustedIPs:
         - "127.0.0.1/32"
         - "::1/128"
@@ -33,13 +35,24 @@ entryPoints:
     http:
       middlewares:
         - "secure-headers@file"   # 注入 iframe/CSP 头，飞牛桌面内嵌必需
-      tls: {}                      # 默认自签证书，开箱即用；自有证书见 dynamic/middlewares.yml 的 TLS Store
+      tls: {}                      # 默认自签证书，开箱即用
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: ${ACME_EMAIL:-admin@example.com}
+      storage: /data/acme.json
+      # caServer 留空则用 Let's Encrypt 生产环境；可在向导选择 staging 进行调试。
+      caServer: ${ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}
+      # HTTP-01 挑战：使用 80 入口，需 80 端口对外可达（默认即如此）。
+      httpChallenge:
+        entryPoint: web
 
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false        # 仅代理显式打 traefik.enable=true 标签的容器
-    network: trim-default          # 自动发现接入飞牛默认网络的其它应用
+    network: trim-default          # 飞牛应用共享网络；取该网络 IP 作为后端地址，实现跨网段反代
   file:
     directory: "/etc/traefik/dynamic"
     watch: true                    # 热加载动态配置（新增反代无需重启 Traefik）
@@ -49,12 +62,3 @@ log:
   filePath: "/data/traefik.log"    # 日志写入飞牛共享目录 traefik/data
 
 accessLog: true
-
-# ── 可选：本地插件（真实客户端 IP 转换 XFF→X-Real-IP） ──
-# 需同时满足：① compose 中挂载插件目录（- ${TRIM_PKGVAR}/plugins:/plugins-local/src）
-#            ② traefik 镜像内含 Go 构建环境（官方 traefik:latest 不含，需自行构建镜像）
-# 默认不启用，避免启动失败；启用后可在 dynamic/middlewares.yml 中启用 xff2realip 中间件。
-# experimental:
-#   localPlugins:
-#     traefik-xff-to-xrealip:
-#       moduleName: github.com/jeppestaerk/traefik-xff-to-xrealip

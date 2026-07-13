@@ -2,72 +2,192 @@
 # config_callback —— 依据安装/设置向导输入，生成 Traefik 动态配置到可写数据目录。
 #
 # 运行时模型：
-#   ${TRIM_PKGVAR}          = 包内 app/docker（只读），含 traefik.yaml / dynamic/ / templates/
+#   ${TRIM_PKGVAR}          = 包内 app/docker（只读），含 traefik.yaml / dynamic/ 模板 / templates/
 #   ${TRIM_DATA_SHARE_PATHS}= 可写数据目录（file provider 热加载来源）
-# 生成的 dynamic/ 由 Traefik file provider 自动热加载，无需重启容器。
+# 生成的内容由 Traefik file provider 自动热加载，无需重启容器。
 # 本脚本同时被 install_callback（安装后）与 config_callback（设置变更后）调用。
 
 set -euo pipefail
 
 PKG_DOCKER="${TRIM_PKGVAR}"                          # 包内 app/docker（只读）
 TPL="${PKG_DOCKER}/templates"
-OUT="${TRIM_DATA_SHARE_PATHS}/dynamic"               # 可写数据目录
+OUT="${TRIM_DATA_SHARE_PATHS}/dynamic"              # 可写数据目录
 mkdir -p "${OUT}"
+mkdir -p "${TRIM_DATA_SHARE_PATHS}/certificates"
 
 # ── 读取向导变量（带默认值）──
 DOMAIN="${wizard_domain:-}"
-FNOS_HTTP_PORT="${wizard_fnos_http_port:-5666}"
-FNOS_HTTPS_PORT="${wizard_fnos_https_port:-5667}"
-HTTPS_ONLY="${wizard_https_only:-false}"
+TZ="${wizard_tz:-Asia/Shanghai}"
+TLS_MODE="${wizard_tls_mode:-selfsigned}"
+CERT_FILE="${wizard_cert_file:-fullchain.pem}"
+KEY_FILE="${wizard_key_file:-privkey.pem}"
+ACME_EMAIL="${wizard_acme_email:-}"
+ACME_CA="${wizard_acme_ca:-prod}"
+HTTPS_ONLY="${wizard_https_only:-true}"
 DASH_ENABLE="${wizard_dashboard_enable:-false}"
 DASH_USER="${wizard_dashboard_user:-admin}"
 DASH_PASS="${wizard_dashboard_pass:-}"
 
-# FnOS 路由规则：有域名则按 Host 匹配，否则兜底（无 rule = 匹配所有请求）
-if [ -n "${DOMAIN}" ]; then
-  FNOS_RULE="rule: Host(\`${DOMAIN}\`)"
-else
-  FNOS_RULE=""
-fi
-
-# ── 首次安装：把用户可编辑文件从包内拷贝到数据目录（之后保留用户修改，不被覆盖）──
-seed() {
-  local name
-  name="$(basename "$1")"
-  if [ ! -f "${OUT}/${name}" ]; then
-    cp "$1" "${OUT}/${name}"
+# 提取注册域（最后两段）用于 ACME 泛域名 SAN：nas.example.com -> example.com
+regdomain() {
+  local d="$1"
+  local oifs="$IFS"; IFS='.'; set -- $d; IFS="$oifs"
+  if [ "$#" -ge 2 ]; then
+    eval "echo \"\$((\$#-1)):\$*\"" >/dev/null 2>&1 || true
+    local n=$#; local penult; local last
+    eval "penult=\$$((n-1))"; eval "last=\$$n"
+    echo "${penult}.${last}"
+  else
+    echo "$d"
   fi
 }
-seed "${PKG_DOCKER}/dynamic/middlewares.yml"
-seed "${PKG_DOCKER}/dynamic/external-service.yml"
+WILDCARD="*.$(regdomain "${DOMAIN}")"
 
-# ── 渲染模板：将占位符替换为向导值 ──
-render() {
-  local src="$1" dst="$2"
-  sed -e "s|__FNOS_HTTP_PORT__|${FNOS_HTTP_PORT}|g" \
-      -e "s|__FNOS_HTTPS_PORT__|${FNOS_HTTPS_PORT}|g" \
-      -e "s|__FNOS_RULE__|${FNOS_RULE}|g" \
-      -e "s|__DASH_USER__|${DASH_USER}|g" \
-      -e "s|__DASH_HASH__|${DASH_HASH:-}|g" \
-      "${src}" > "${dst}"
-}
+# 静态 traefik.yaml 里的 websecure entrypoint 默认 tls:{}（自签）。
+# 路由层面的 TLS 声明按模式决定（基准缩进 6 空格，与 entryPoints/service 同级）：
+if [ "${TLS_MODE}" = "acme" ] && [ -n "${DOMAIN}" ]; then
+  ROUTE_TLS="$(cat <<EOF
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: "${DOMAIN}"
+            sans:
+              - "${WILDCARD}"
+EOF
+)"
+else
+  ROUTE_TLS="      tls: {}"
+fi
 
-# 飞牛系统主页反代（始终生成）
-render "${TPL}/fnos.yml.tpl" "${OUT}/fnos.yml"
+# ── 1) 中间件（secure-headers 必选；basic-auth 占位；custom 模式加载自有证书 TLS Store）──
+{
+  echo "# 动态中间件与 TLS 配置（由向导自动生成，改设置后重生成）"
+  echo "# 被静态配置与路由引用：secure-headers@file / basic-auth@file。"
+  echo "http:"
+  echo "  middlewares:"
+  echo "    # 安全响应头：允许被飞牛桌面以 iframe 内嵌"
+  echo "    secure-headers:"
+  echo "      headers:"
+  echo "        sslRedirect: false"
+  echo "        frameDeny: false"
+  echo "        customFrameOptionsValue: \"\""
+  echo "        contentTypeNosniff: true"
+  echo "        browserXssFilter: true"
+  echo "        customResponseHeaders:"
+  echo "          Content-Security-Policy: \"frame-ancestors *;\""
+  echo "        sslProxyHeaders:"
+  echo "          X-Forwarded-Proto: \"https\""
+  echo ""
+  echo "    # 通用 BasicAuth（用于 external-service.yml 中需要密码保护的服务）"
+  echo "    basic-auth:"
+  echo "      basicAuth:"
+  echo "        users:"
+  echo "          - \"admin:\$2y\$05\$REPLACE_WITH_YOUR_htpasswd_OUTPUT\""
+} > "${OUT}/middlewares.yml"
 
-# HTTPS Only 跳转（仅开启时生成，关闭时删除）
+# 自有证书模式：在数据目录 certificates/ 下放置 cert/key，加载为默认证书
+if [ "${TLS_MODE}" = "custom" ]; then
+  {
+    echo ""
+    echo "# 自有证书（custom 模式）：作为默认证书对所有 HTTPS 域名生效"
+    echo "tls:"
+    echo "  stores:"
+    echo "    default:"
+    echo "      defaultCertificate:"
+    echo "        certFile: \"/certificates/${CERT_FILE}\""
+    echo "        keyFile: \"/certificates/${KEY_FILE}\""
+  } >> "${OUT}/middlewares.yml"
+fi
+
+# ── 2) 飞牛系统主页反代（始终生成）──
+{
+  echo "# 飞牛(FnOS) 系统主页反代 —— 由向导自动生成"
+  echo "# 访问 https://你的域名 即反代到飞牛主页。其它子域名服务请在 external-service.yml 添加。"
+  echo "http:"
+  echo "  routers:"
+  echo "    fnos-system-https:"
+  echo "      entryPoints: [websecure]"
+  if [ -n "${DOMAIN}" ]; then
+    echo "      rule: \"Host(\`${DOMAIN}\`)\""
+  else
+    echo "      # 未配置域名时作为兜底网关（请尽快在设置中填写基础域名）"
+  fi
+  echo "      service: fnos-system-https"
+  echo "      middlewares:"
+  echo "        - secure-headers@file"
+  echo "${ROUTE_TLS}"
+  echo "      priority: 1"
+  echo ""
+  echo "  services:"
+  echo "    fnos-system-https:"
+  echo "      loadBalancer:"
+  echo "        serversTransport: fnos-skip-tls   # 飞牛 HTTPS 为自签证书，跳过校验"
+  echo "        servers:"
+  echo "          - url: \"https://host.docker.internal:5667\""
+  echo "        passHostHeader: true"
+  echo ""
+  echo "  serversTransports:"
+  echo "    fnos-skip-tls:"
+  echo "      insecureSkipVerify: true"
+} > "${OUT}/fnos.yml"
+
+# ── 3) HTTPS Only 跳转（仅开启时生成）──
 if [ "${HTTPS_ONLY}" = "true" ]; then
-  render "${TPL}/redirect.yml.tpl" "${OUT}/redirect.yml"
+  {
+    echo "# HTTP -> HTTPS 全量跳转（开启 HTTPS Only 时生成）"
+    echo "http:"
+    echo "  routers:"
+    echo "    http-to-https:"
+    echo "      entryPoints: [web]"
+    echo "      rule: \"HostRegexp(\`.*\`)\""
+    echo "      middlewares: [redirect-to-https@file]"
+    echo "      service: dummy-svc"
+    echo "      priority: 2"
+    echo "  services:"
+    echo "    dummy-svc:"
+    echo "      loadBalancer:"
+    echo "        servers:"
+    echo "          - url: \"http://127.0.0.1:65535\""
+    echo "  middlewares:"
+    echo "    redirect-to-https:"
+    echo "      redirectScheme:"
+    echo "        scheme: https"
+    echo "        port: \"443\""
+    echo "        permanent: true"
+  } > "${OUT}/redirect.yml"
 else
   rm -f "${OUT}/redirect.yml"
 fi
 
-# 远程 Dashboard（仅启用且提供密码时生成；否则清理）
+# ── 4) 远程 Dashboard（仅启用且提供密码时生成）──
 if [ "${DASH_ENABLE}" = "true" ] && [ -n "${DASH_PASS}" ]; then
   HASH="$(openssl passwd -apr1 "${DASH_PASS}" 2>/dev/null || true)"
   if [ -n "${HASH}" ]; then
-    DASH_HASH="${HASH}" render "${TPL}/auth.yml.tpl" "${OUT}/auth.yml"
-    render "${TPL}/dashboard.yml.tpl" "${OUT}/dashboard.yml"
+    {
+      echo "# Dashboard 远程访问 BasicAuth（由向导自动生成，请勿手改）"
+      echo "http:"
+      echo "  middlewares:"
+      echo "    dash-auth:"
+      echo "      basicAuth:"
+      echo "        users:"
+      echo "          - \"${DASH_USER}:${HASH}\""
+    } > "${OUT}/auth.yml"
+    {
+      echo "# 远程访问 Dashboard（经 HTTPS 入口 + BasicAuth 保护）"
+      echo "http:"
+      echo "  routers:"
+      echo "    dashboard:"
+      echo "      entryPoints: [websecure]"
+      if [ -n "${DOMAIN}" ]; then
+        echo "      rule: \"Host(\`${DOMAIN}\`) && PathPrefix(\`/dashboard\`)\""
+      fi
+      echo "      service: api@internal"
+      echo "      middlewares:"
+      echo "        - secure-headers@file"
+      echo "        - dash-auth@file"
+      echo "${ROUTE_TLS}"
+      echo "      priority: 100"
+    } > "${OUT}/dashboard.yml"
   else
     echo "openssl 不可用，无法生成 Dashboard 密码哈希，已跳过远程 Dashboard 路由。" > "${TRIM_TEMP_LOGFILE:-/dev/null}"
     rm -f "${OUT}/dashboard.yml" "${OUT}/auth.yml"
@@ -75,5 +195,15 @@ if [ "${DASH_ENABLE}" = "true" ] && [ -n "${DASH_PASS}" ]; then
 else
   rm -f "${OUT}/dashboard.yml" "${OUT}/auth.yml"
 fi
+
+# ── 5) 反代「其它服务」示例模板（首次安装时拷贝到数据目录，之后保留用户修改）──
+seed() {
+  local name
+  name="$(basename "$1")"
+  if [ ! -f "${OUT}/${name}" ]; then
+    cp "$1" "${OUT}/${name}"
+  fi
+}
+seed "${PKG_DOCKER}/dynamic/external-service.yml"
 
 exit 0

@@ -1,13 +1,14 @@
 # Traefik 反代应用 —— 飞牛(FnOS) 通用版
-# 设计目标：覆盖参考配置 ref/traefik-proxy 的全部功能点，并去除个性化、提升通用性。
 #
-# 关键架构说明：
-#   1. 入口使用 50080/50443，避开飞牛系统占用的 80/443，避免端口冲突导致无法启动。
-#   2. Traefik 同时接入两个网络：
-#        - traefik        ：本应用内部网络
-#        - trim-default   ：飞牛系统默认应用网络（external）。
-#      这样 Traefik 可通过 Docker Provider 自动发现「其它 FnOS 应用容器」并直接以容器名反代。
-#   3. host.docker.internal 指向宿主机，用于反代「飞牛本机」上运行的服务（见 dynamic/external-service.yml）。
+# 设计要点：
+#   1. 入口使用 80/443（可在安装/设置向导中修改为其它端口），符合标准反向代理习惯。
+#      FnOS 系统 Web 默认占用 5666/5667，因此 80/443 在飞牛上通常是空闲的；
+#      若你的环境 80/443 已被占用，请在向导中改为其它端口（如 8080/8443）。
+#   2. Traefik 仅接入自身 bridge 网络 `traefik`，不依赖任何外部网络，
+#      保证 `docker compose up` 一定能启动（避免外部网络不存在导致安装 16001）。
+#   3. 反代「飞牛本机 / 局域网服务」通过 host.docker.internal 访问（见 dynamic/external-service.yml）。
+#   4. TLS 三种模式（自签 / 自有证书 / ACME）由向导选择，静态配置中的
+#      certificatesResolvers.letsencrypt 已就绪，email 经 ACME_EMAIL 环境变量注入。
 
 services:
   traefik:
@@ -15,27 +16,25 @@ services:
     container_name: traefik
     restart: unless-stopped
     environment:
-      - TZ=${wizard_tz:-Asia/Shanghai}   # 时区，来自安装/设置向导
+      - TZ=${wizard_tz:-Asia/Shanghai}                 # 时区，来自安装/设置向导
+      # ACME（Let's Encrypt）注册邮箱与 CA 地址，由向导注入；非 ACME 模式留空无害。
+      - ACME_EMAIL=${acme_email:-}
+      - ACME_CASERVER=${acme_ca:-https://acme-v02.api.letsencrypt.org/directory}
     security_opt:
       - no-new-privileges:true
     networks:
       - traefik
-      - trim-default
     ports:
-      - "${TRIM_SERVICE_PORT}:8080"   # Dashboard（飞牛桌面入口，内网直连，无需认证）
-      - "50080:50080"                 # HTTP 入口（避开飞牛占用的 80）
-      - "50443:50443"                 # HTTPS 入口（避开飞牛占用的 443）
+      - "${http_port:-80}:80"                         # HTTP  入口（默认 80，向导可改）
+      - "${https_port:-443}:443"                     # HTTPS 入口（默认 443，向导可改）
+      - "${TRIM_SERVICE_PORT:-8080}:8080"            # Dashboard（飞牛桌面入口，内网直连）
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "/etc/localtime:/etc/localtime:ro"                       # 同步宿主机时区
-      - "${TRIM_PKGVAR}/traefik.yaml:/etc/traefik/traefik.yaml:ro"
-      - "${TRIM_DATA_SHARE_PATHS}/dynamic:/etc/traefik/dynamic:ro"   # 动态配置（向导生成 + 热加载）
-      - "${TRIM_DATA_SHARE_PATHS}:/data"                         # 日志 / 证书 / 数据
+      - "${TRIM_PKGVAR}/traefik.yaml:/etc/traefik/traefik.yaml:ro"   # 静态配置（包内，只读）
+      - "${TRIM_DATA_SHARE_PATHS}/dynamic:/etc/traefik/dynamic:ro" # 动态配置（向导生成 + 热加载）
+      - "${TRIM_DATA_SHARE_PATHS}:/data"                         # 日志 / ACME 数据 / 证书
       - "${TRIM_DATA_SHARE_PATHS}/certificates:/certificates:ro" # 自有证书放这里（见 README）
-      # 如需直接挂载飞牛「证书中心」签发的证书，取消下一行并改为你的实际路径：
-      # - /vol1/1000/cloud/cert:/cert:ro
-      # 可选：本地插件（真实客户端 IP 转换，见 README「真实客户端 IP」章节），默认不启用：
-      # - ${TRIM_PKGVAR}/plugins:/plugins-local/src
     # 允许反代「飞牛本机」上运行的服务（容器外服务），通过 host.docker.internal 访问
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -48,6 +47,3 @@ services:
 networks:
   traefik:
     driver: bridge
-  trim-default:
-    external: true        # 复用飞牛系统默认应用网络
-    name: trim-default

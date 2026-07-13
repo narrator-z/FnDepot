@@ -4,32 +4,36 @@
     "items": [
       {
         "type": "text",
-        "field": "wizard_fnos_http_port",
-        "label": "飞牛系统 HTTP 端口",
-        "initValue": "5666",
-        "helpText": "飞牛设置 → 网络/常规 中的 HTTP 端口。V0.8.22 起默认 5666（更早版本为 8000）。",
+        "field": "http_port",
+        "label": "HTTP 入口端口",
+        "initValue": "80",
+        "helpText": "Traefik HTTP 入口在宿主机上监听的端口。FnOS 系统 Web 默认占用 5666/5667，因此 80 通常空闲；若被占用请改为其它端口（如 8088，注意不要与 Dashboard 的 8080 冲突）。",
         "rules": [
-          { "required": true, "message": "请输入飞牛 HTTP 端口" },
+          { "required": true, "message": "请输入 HTTP 端口" },
           { "pattern": "^[0-9]+$", "message": "端口必须为数字" }
         ]
       },
       {
         "type": "text",
-        "field": "wizard_fnos_https_port",
-        "label": "飞牛系统 HTTPS 端口",
-        "initValue": "5667",
-        "helpText": "飞牛设置 → 网络/常规 中的 HTTPS 端口。V0.8.22 起默认 5667（更早版本为 8001）。",
+        "field": "https_port",
+        "label": "HTTPS 入口端口",
+        "initValue": "443",
+        "helpText": "Traefik HTTPS 入口在宿主机上监听的端口。若 443 被占用请改为其它端口（如 8443）。",
         "rules": [
-          { "required": true, "message": "请输入飞牛 HTTPS 端口" },
+          { "required": true, "message": "请输入 HTTPS 端口" },
           { "pattern": "^[0-9]+$", "message": "端口必须为数字" }
         ]
       },
       {
         "type": "text",
         "field": "wizard_domain",
-        "label": "反代域名（可选）",
+        "label": "基础域名（必填）",
         "initValue": "",
-        "helpText": "留空则 Traefik 作为兜底网关直接反代飞牛主页（50080/50443 均可访问）；填写后按 Host 匹配（如 nas.example.com）。"
+        "helpText": "你的公网/内网域名，例如 nas.example.com。将用于 TLS 证书(ACME 的 SAN)与反代路由的 Host 匹配；访问 https://你的域名 即反代到飞牛主页。",
+        "rules": [
+          { "required": true, "message": "基础域名为必填项" },
+          { "pattern": "^[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", "message": "请输入合法域名，如 nas.example.com" }
+        ]
       },
       {
         "type": "text",
@@ -41,21 +45,70 @@
     ]
   },
   {
+    "stepTitle": "TLS / 证书",
+    "items": [
+      {
+        "type": "select",
+        "field": "wizard_tls_mode",
+        "label": "TLS 模式",
+        "initValue": "selfsigned",
+        "options": [
+          { "label": "自签证书（默认，开箱即用）", "value": "selfsigned" },
+          { "label": "自有证书（自己提供 cert/key）", "value": "custom" },
+          { "label": "Let's Encrypt (ACME 自动签发)", "value": "acme" }
+        ],
+        "helpText": "自签：Traefik 自动生成自签证书，浏览器会提示不受信任；自有证书：把 cert/key 放到数据目录 certificates/ 下；ACME：自动向 Let's Encrypt 申请可信证书（需 80 端口对外可达）。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_cert_file",
+        "label": "证书文件路径（自有证书模式）",
+        "initValue": "fullchain.pem",
+        "helpText": "数据目录 certificates/ 下的证书文件名，例如 fullchain.pem。仅在「自有证书」模式生效。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_key_file",
+        "label": "私钥文件路径（自有证书模式）",
+        "initValue": "privkey.pem",
+        "helpText": "数据目录 certificates/ 下的私钥文件名，例如 privkey.pem。仅在「自有证书」模式生效。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_acme_email",
+        "label": "ACME 注册邮箱（ACME 模式）",
+        "initValue": "",
+        "helpText": "Let's Encrypt 注册邮箱，用于证书签发通知与恢复。仅在「ACME」模式生效。"
+      },
+      {
+        "type": "select",
+        "field": "wizard_acme_ca",
+        "label": "ACME 环境（ACME 模式）",
+        "initValue": "prod",
+        "options": [
+          { "label": "生产环境（推荐）", "value": "prod" },
+          { "label": "Staging（测试，限流宽松）", "value": "staging" }
+        ],
+        "helpText": "首次调试建议先用 Staging，避免触发 Let's Encrypt 频率限制；正式使用切回生产。"
+      }
+    ]
+  },
+  {
     "stepTitle": "安全选项",
     "items": [
       {
         "type": "switch",
         "field": "wizard_https_only",
-        "label": "启用 HTTPS Only（HTTP 50080 强制跳转 HTTPS 50443）",
-        "initValue": "false",
+        "label": "启用 HTTPS Only（HTTP 强制跳转 HTTPS）",
+        "initValue": "true",
         "helpText": "开启后所有 HTTP 明文访问将被 301 跳转到 HTTPS；关闭则同时保留两个入口（默认，局域网明文可达）。"
       },
       {
         "type": "switch",
         "field": "wizard_dashboard_enable",
-        "label": "启用远程访问 Dashboard（50443 + 账号密码）",
+        "label": "启用远程访问 Dashboard（HTTPS + 账号密码）",
         "initValue": "false",
-        "helpText": "开启后需设置下方账号密码，远程经 50443 访问 Traefik Dashboard 时要求 BasicAuth 校验。"
+        "helpText": "开启后需设置下方账号密码，经 HTTPS 入口访问 Traefik Dashboard 时要求 BasicAuth 校验。"
       },
       {
         "type": "text",

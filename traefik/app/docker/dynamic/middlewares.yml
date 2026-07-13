@@ -8,7 +8,7 @@ http:
     # frameDeny 必须关闭、customFrameOptionsValue 必须清空，否则 iframe 被拦截。
     secure-headers:
       headers:
-        sslRedirect: false             # 不强制跳转，保留 50080(LAN HTTP) 入口；HTTPS Only 跳转由 redirect.yml 控制
+        sslRedirect: false             # 不强制跳转，保留 80(LAN HTTP) 入口；HTTPS Only 跳转由 redirect.yml 控制
         frameDeny: false               # ❌ 必须关闭，否则所有 iframe 被拦截（飞牛桌面内嵌必需）
         customFrameOptionsValue: ""    # ❌ 必须清空，否则强制 SAMEORIGIN
         contentTypeNosniff: true
@@ -31,7 +31,7 @@ http:
     # fix-host:
     #   headers:
     #     customRequestHeaders:
-    #       Host: "git.your-domain.example:50443"
+    #       Host: "git.your-domain.example:443"
 
     # ── 可选：真实客户端 IP（XFF→X-Real-IP）──
     # 依赖本地插件 traefik-xff-to-xrealip（见 traefik.yaml 顶部说明），默认不启用。
@@ -43,7 +43,7 @@ http:
 
 # ── 可选：自有 TLS 证书 ──
 # 默认使用 Traefik 自签证书。将证书(crt/key)放入数据目录 certificates/ 后取消注释，
-# 并确认文件名正确；证书会自动作为默认证书对所有 50443 域名生效。
+# 并确认文件名正确；证书会自动作为默认证书对所有 443 域名生效。
 # tls:
 #   stores:
 #     default:
