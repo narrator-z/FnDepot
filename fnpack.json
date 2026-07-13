@@ -11,6 +11,7 @@
     "install_type": "系统空间",
     "isdocker": "true",
     "size": "73.06KB",
+    "download_url": "https://raw.githubusercontent.com/narrator-z/FnDepot/master/traefik/traefik_all.fpk",
     "changelog": "首次发布"
   },
   "MoviePilot": {
@@ -22,7 +23,7 @@
     "distributor": "narrator-z",
     "distributor_url": "https://github.com/narrator-z/FnDepot",
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
-    "install_type": "docker",
+    "install_type": "系统空间",
     "isdocker": "true",
     "size": "150KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/v2.14.2/MoviePilot.fpk",
