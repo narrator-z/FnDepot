@@ -3,6 +3,7 @@ name: Auto Publish FnDepot Apps
 # 当某个应用的版本（fnpack.json 中的 version）发生变更并推送到 master 时，
 # 自动从源码重建对应的 .fpk、更新 fnpack.json 的 size / download_url，
 # 提交回仓库（[skip ci] 防止循环），并为该版本创建 GitHub Release（附带 fpk）。
+# 其中 download_url 始终指向该版本「固定」的 Release 资产链接（可回滚、不随 master 漂移）。
 #
 # 设计要点：
 #   - 仅在「版本号变更」时发布，避免把未发版的源码改动（WIP）提前发布。
@@ -107,17 +108,43 @@ jobs:
             SIZE_FMT=$(awk "BEGIN{printf \"%.2fKB\", $BYTES/1024}")
             jq --arg a "$APP" --arg s "$SIZE_FMT" '.[$a].size=$s' fnpack.json > fnpack.tmp && mv fnpack.tmp fnpack.json
 
-            # 若 download_url 为空，按仓库默认分支自动补全
-            DL=$(jq -r --arg a "$APP" '.[$a].download_url // empty' fnpack.json)
-            if [[ -z "$DL" ]]; then
-              URL="https://raw.githubusercontent.com/$REPO/$BRANCH/$APP/${APP}_all.fpk"
-              jq --arg a "$APP" --arg u "$URL" '.[$a].download_url=$u' fnpack.json > fnpack.tmp && mv fnpack.tmp fnpack.json
-            fi
-
             CHANGELOG=$(jq -r --arg a "$APP" '.[$a].changelog // ""' fnpack.json)
             RELEASES+=("$APP|$CUR|$CHANGELOG|$FPK_DST")
           done
 
+          # 为版本变更创建 GitHub Release（tag 已存在则复用），并将 download_url
+          # 统一改写为该版本「固定」的 Release 资产链接（可回滚、不随 master 漂移）。
+          for R in "${RELEASES[@]:-}"; do
+            [[ -z "$R" ]] && continue
+            IFS='|' read -r APP VER CL FPK <<< "$R"
+            TAG="v${APP}-${VER}"
+            REL_URL="https://github.com/$REPO/releases/download/$TAG/${APP}_all.fpk"
+
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "::notice::release $TAG already exists — reuse"
+            else
+              echo "::notice::creating release $TAG with asset $FPK"
+              set +e
+              gh release create "$TAG" "$FPK" --title "${APP} ${VER}" --notes "${CL}"
+              rc=$?
+              set -e
+              if [[ $rc -ne 0 ]]; then
+                echo "::error::failed to create release $TAG (rc=$rc)"
+                exit $rc
+              fi
+              echo "::notice::release $TAG created"
+            fi
+
+            # 始终将 download_url 指向该版本固定的 Release 资产链接
+            CUR_DL=$(jq -r --arg a "$APP" '.[$a].download_url // empty' fnpack.json)
+            if [[ "$CUR_DL" != "$REL_URL" ]]; then
+              jq --arg a "$APP" --arg u "$REL_URL" '.[$a].download_url=$u' fnpack.json > fnpack.tmp && mv fnpack.tmp fnpack.json
+              NEEDS_COMMIT=true
+              echo "::notice::$APP download_url -> $REL_URL"
+            fi
+          done
+
+          # 把重建的 fpk、更新的 size / download_url 提交回仓库（[skip ci] 防止循环触发）
           if [[ "$NEEDS_COMMIT" == "true" ]]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -125,26 +152,5 @@ jobs:
             git commit -m "chore(ci): 自动重建 fpk 并更新元数据 [skip ci]"
             git push
           fi
-
-          # 为版本变更创建 GitHub Release（tag 已存在则跳过，防止重复发版）
-          for R in "${RELEASES[@]:-}"; do
-            [[ -z "$R" ]] && continue
-            IFS='|' read -r APP VER CL FPK <<< "$R"
-            TAG="v${APP}-${VER}"
-            if git rev-parse "$TAG" >/dev/null 2>&1; then
-              echo "::notice::release $TAG already exists — skip"
-              continue
-            fi
-            echo "::notice::creating release $TAG with asset $FPK"
-            set +e
-            gh release create "$TAG" "$FPK" --title "${APP} ${VER}" --notes "${CL}"
-            rc=$?
-            set -e
-            if [[ $rc -ne 0 ]]; then
-              echo "::error::failed to create release $TAG (rc=$rc)"
-              exit $rc
-            fi
-            echo "::notice::release $TAG created"
-          done
 
           rm -rf "$BUILD_DIR"

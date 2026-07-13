@@ -11,7 +11,7 @@
     "install_type": "系统空间",
     "isdocker": "true",
     "size": "79.53KB",
-    "download_url": "https://raw.githubusercontent.com/narrator-z/FnDepot/master/traefik/traefik_all.fpk",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.0.2/traefik_all.fpk",
     "changelog": "接入自动发布工作流并验证 Release 发版链路"
   },
   "MoviePilot": {
@@ -26,7 +26,7 @@
     "install_type": "系统空间",
     "isdocker": "true",
     "size": "21.76KB",
-    "download_url": "https://raw.githubusercontent.com/narrator-z/FnDepot/master/MoviePilot/MoviePilot_all.fpk",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.4/MoviePilot_all.fpk",
     "changelog": "接入自动发布工作流并验证 Release 发版链路"
   }
 }
