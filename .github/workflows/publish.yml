@@ -1,0 +1,116 @@
+name: Auto Publish FnDepot Apps
+
+# 当某个应用的版本（fnpack.json 中的 version）发生变更并推送到 master 时，
+# 自动从源码重建对应的 .fpk、更新 fnpack.json 的 size / download_url，
+# 提交回仓库（[skip ci] 防止循环），并为该版本创建 GitHub Release（附带 fpk）。
+#
+# 设计要点：
+#   - 仅在「版本号变更」时发布，避免把未发版的源码改动（WIP）提前发布。
+#   - 源码变更但未 bump 版本：本次不发布（仍沿用该版本已有的 fpk）。
+#   - 提交信息包含 [skip ci]，避免 Action 自身提交再次触发本工作流。
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'fnpack.json'
+      - 'traefik/**'
+      - 'MoviePilot/**'
+      - 'scripts/build_fpk.sh'
+      - '.github/workflows/publish.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 需要完整历史以比对版本、创建 tag
+
+      - name: Publish apps whose version changed
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          command -v jq >/dev/null 2>&1 || { echo "jq is required"; exit 1; }
+
+          # 首次推送到空仓库时无法比对版本，直接跳过，避免误发版
+          if [[ "$BEFORE" =~ ^0+$ ]]; then
+            echo "::notice::Initial repository push detected — skipping auto-publish"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null || git ls-files)
+          APPS=$(jq -r 'keys[]' fnpack.json)
+          BUILD_DIR=$(mktemp -d)
+          NEEDS_COMMIT=false
+          RELEASES=()
+
+          for APP in $APPS; do
+            PREV=$(git show "$BEFORE:fnpack.json" 2>/dev/null | jq -r --arg a "$APP" '.[$a].version // empty' || true)
+            CUR=$(jq -r --arg a "$APP" '.[$a].version // empty' fnpack.json)
+
+            if [[ -z "$CUR" || "$PREV" == "$CUR" ]]; then
+              echo "::notice::$APP version unchanged ($CUR) — skip"
+              continue
+            fi
+            echo "::notice::$APP version changed: $PREV -> $CUR — publishing"
+
+            # 从当前源码重建 fpk
+            bash scripts/build_fpk.sh "$APP" "$BUILD_DIR" all
+            FPK_SRC="$BUILD_DIR/${APP}_all.fpk"
+            FPK_DST="$APP/${APP}_all.fpk"
+            mkdir -p "$APP"
+            if ! cmp -s "$FPK_SRC" "$FPK_DST" 2>/dev/null; then
+              cp "$FPK_SRC" "$FPK_DST"
+              NEEDS_COMMIT=true
+            fi
+
+            # 更新 size（fpk 文件字节数 / 1024，保留两位小数 + KB）
+            BYTES=$(stat -c%s "$FPK_DST")
+            SIZE_FMT=$(awk "BEGIN{printf \"%.2fKB\", $BYTES/1024}")
+            jq --arg a "$APP" --arg s "$SIZE_FMT" '.[$a].size=$s' fnpack.json > fnpack.tmp && mv fnpack.tmp fnpack.json
+
+            # 若 download_url 为空，按仓库默认分支自动补全
+            DL=$(jq -r --arg a "$APP" '.[$a].download_url // empty' fnpack.json)
+            if [[ -z "$DL" ]]; then
+              URL="https://raw.githubusercontent.com/$REPO/$BRANCH/$APP/${APP}_all.fpk"
+              jq --arg a "$APP" --arg u "$URL" '.[$a].download_url=$u' fnpack.json > fnpack.tmp && mv fnpack.tmp fnpack.json
+            fi
+
+            CHANGELOG=$(jq -r --arg a "$APP" '.[$a].changelog // ""' fnpack.json)
+            RELEASES+=("$APP|$CUR|$CHANGELOG|$FPK_DST")
+          done
+
+          if [[ "$NEEDS_COMMIT" == "true" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore(ci): 自动重建 fpk 并更新元数据 [skip ci]"
+            git push
+          fi
+
+          # 为版本变更创建 GitHub Release（tag 已存在则跳过，防止重复发版）
+          for R in "${RELEASES[@]:-}"; do
+            [[ -z "$R" ]] && continue
+            IFS='|' read -r APP VER CL FPK <<< "$R"
+            TAG="v${APP}-${VER}"
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "::notice::release $TAG already exists — skip"
+              continue
+            fi
+            gh release create "$TAG" "$FPK" --title "${APP} ${VER}" --notes "${CL}"
+          done
+
+          rm -rf "$BUILD_DIR"
