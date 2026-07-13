@@ -10,7 +10,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "79.58KB",
+    "size": "81.60KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.1.1/traefik_all.fpk",
     "changelog": "修复安装失败(10266 too many colons)：compose 卷改为整块 ${TRIM_DATA_SHARE_PATHS}:/data 挂载；配置统一落到 /data；修正 ACME CA(prod/staging) 注入"
   },
