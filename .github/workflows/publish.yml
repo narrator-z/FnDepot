@@ -50,6 +50,8 @@ jobs:
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
           FORCE_APP: ${{ github.event.inputs.force_app }}
+          # gh CLI 不会自动复用 Actions 的 GITHUB_TOKEN，必须显式注入，否则 gh release create 因未认证失败
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           command -v jq >/dev/null 2>&1 || { echo "jq is required"; exit 1; }
@@ -133,7 +135,16 @@ jobs:
               echo "::notice::release $TAG already exists — skip"
               continue
             fi
+            echo "::notice::creating release $TAG with asset $FPK"
+            set +e
             gh release create "$TAG" "$FPK" --title "${APP} ${VER}" --notes "${CL}"
+            rc=$?
+            set -e
+            if [[ $rc -ne 0 ]]; then
+              echo "::error::failed to create release $TAG (rc=$rc)"
+              exit $rc
+            fi
+            echo "::notice::release $TAG created"
           done
 
           rm -rf "$BUILD_DIR"
