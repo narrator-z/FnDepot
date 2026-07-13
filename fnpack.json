@@ -10,7 +10,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "79.54KB",
+    "size": "79.53KB",
     "download_url": "https://raw.githubusercontent.com/narrator-z/FnDepot/master/traefik/traefik_all.fpk",
     "changelog": "接入自动发布工作流并验证 Release 发版链路"
   },
@@ -25,7 +25,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.75KB",
+    "size": "21.76KB",
     "download_url": "https://raw.githubusercontent.com/narrator-z/FnDepot/master/MoviePilot/MoviePilot_all.fpk",
     "changelog": "接入自动发布工作流并验证 Release 发版链路"
   }
