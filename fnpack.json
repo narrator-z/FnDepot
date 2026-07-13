@@ -10,7 +10,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "79.58KB",
+    "size": "81.01KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.1.0/traefik_all.fpk",
     "changelog": "修复安装失败(16001)：移除 os_max_version/checkport；入口端口改 80/443（向导可改）；基础域名必填；新增 TLS 三种模式（自签/自有证书/ACME）；去除依赖外部网络"
   },
