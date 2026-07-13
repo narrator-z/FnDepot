@@ -17,7 +17,7 @@
   "MoviePilot": {
     "display_name": "MoviePilot",
     "platform": "all",
-    "version": "2.14.6",
+    "version": "2.14.7",
     "desc": "NAS媒体库自动化管理工具，基于Jackett和Plex",
     "labels": "媒体,自动化,下载",
     "distributor": "narrator-z",
@@ -25,8 +25,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.93KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.6/MoviePilot_all.fpk",
-    "changelog": "修复安装失败(16001)：compose 改用相对路径、向导变量去前缀、UI 端口改 20669"
+    "size": "21.79KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-2.14.7/MoviePilot_all.fpk",
+    "changelog": "修复 16001：对齐 UCKETX 可工作配置（install_init/权限/data-share/manifest 字段），镜像不变"
   }
 }

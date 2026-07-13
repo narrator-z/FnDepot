@@ -1,7 +1,5 @@
 #!/bin/bash
-# 安装前初始化：环境检查（docker 可用性）
-if ! command -v docker >/dev/null 2>&1; then
-  echo "未检测到 docker，请确认飞牛系统已启用 Docker。" > "${TRIM_TEMP_LOGFILE}"
-  exit 1
-fi
+
+### This script is called before the user installs the application.
+
 exit 0

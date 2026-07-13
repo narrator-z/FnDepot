@@ -1,11 +1,5 @@
 #!/bin/bash
-# 升级后：确保 .env 存在（凭据沿用安装时写入的值）
-DOCKER_DIR="${TRIM_APPDEST}/docker"
-mkdir -p "${DOCKER_DIR}"
-if [ ! -f "${DOCKER_DIR}/.env" ]; then
-  cat > "${DOCKER_DIR}/.env" <<EOF
-moviepilot_admin_username=${wizard_moviepilot_admin_username:-admin}
-moviepilot_admin_password=${wizard_moviepilot_admin_password:-changeme123}
-EOF
-fi
+
+### This script is called after the user upgrades the application.
+
 exit 0
