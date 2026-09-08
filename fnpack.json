@@ -17,7 +17,7 @@
   "moviepilot": {
     "display_name": "MoviePilot",
     "platform": "all",
-    "version": "3.0.4",
+    "version": "3.0.5",
     "desc": "NAS媒体库自动化管理工具，基于Jackett和Plex",
     "labels": "媒体,自动化,下载",
     "distributor": "narrator-z",
@@ -26,7 +26,7 @@
     "install_type": "系统空间",
     "isdocker": "true",
     "size": "22.10KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vmoviepilot-3.0.4/moviepilot_all.fpk",
-    "changelog": "3.0.4 修复 FnOS 应用中心报 10300/应用不存在：目录名与 fnpack 键由 MoviePilot(大写) 改为 moviepilot(小写)，与 manifest 的 appname 一致，飞牛才能按 appname 正确定位应用。3.0.3 已把 appname 改回小写 moviepilot（3.0.0~3.0.2 误改大写 MoviePilot 导致升级卸载旧应用并删除其配置数据目录、造成配置丢失）；display_name 仍为 MoviePilot。"
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vmoviepilot-3.0.5/moviepilot_all.fpk",
+    "changelog": "3.0.5 新增安装向导「媒体库目录」步骤：可自定义容器内 /media 的宿主机挂载路径（字段 moviepilot_media_path，默认 ./media 即应用自身存储、升级不丢；可填飞牛共享文件夹绝对路径如 /vol1/1000/影视，需该共享文件夹已授权本应用访问）。3.0.4 修复 FnOS 应用中心报 10300/应用不存在：目录名与 fnpack 键由 MoviePilot(大写) 改为 moviepilot(小写)，与 manifest 的 appname 一致，飞牛才能按 appname 正确定位应用；3.0.0~3.0.2 误改大写 MoviePilot 导致升级卸载旧应用并删除其配置数据目录、造成配置丢失。"
   }
 }

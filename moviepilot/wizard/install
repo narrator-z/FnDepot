@@ -24,6 +24,21 @@
     ]
   },
   {
+    "stepTitle": "媒体库目录",
+    "items": [
+      {
+        "type": "text",
+        "field": "moviepilot_media_path",
+        "label": "媒体库挂载路径",
+        "initValue": "./media",
+        "helpText": "MoviePilot 容器内 /media 对应的宿主机目录。默认值 ./media 表示使用本应用自身存储空间内的 media 子目录（随应用升级保留，不丢数据）。若要挂载飞牛共享文件夹里的影视库，请填写绝对路径，例如 /vol1/1000/影视。注意：自定义路径必须是飞牛已存在的共享文件夹；若应用提示无权访问，请在该共享文件夹的权限设置中允许本应用（MoviePilot）访问。",
+        "rules": [
+          { "required": true, "message": "请输入媒体库挂载路径" }
+        ]
+      }
+    ]
+  },
+  {
     "stepTitle": "应用端口",
     "items": [
       { "type": "tips", "helpText": "前端端口：20669" },
