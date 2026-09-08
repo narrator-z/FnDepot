@@ -25,7 +25,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.68KB",
+    "size": "22.10KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-3.0.3/MoviePilot_all.fpk",
     "changelog": "3.0.3 关键修复：appname 改回小写 moviepilot（3.0.0~3.0.2 误改大写 MoviePilot 导致飞牛识别为不同应用、升级卸载旧应用并删除其配置数据目录造成配置丢失）；现 appname 与已装基数一致，飞牛可原地升级保留数据。display_name 仍为 MoviePilot"
   }
