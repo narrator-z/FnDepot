@@ -1,5 +1,5 @@
 appname               = moviepilot
-version               = 3.0.3
+version               = 3.0.4
 display_name          = MoviePilot
 desc                  = NAS 媒体库自动化管理工具，基于 Jackett 与 Plex/Emby/Jellyfin，自动刮削、订阅与下载管理。
 source                = thirdparty
@@ -15,5 +15,5 @@ service_port          = 20669
 disable_authorization_path = false
 desktop_uidir         = ui
 desktop_applaunchname = MoviePilot.Application
-changelog             = 3.0.3 关键修复：appname 改回小写 moviepilot（3.0.0~3.0.2 误改成 MoviePilot 大写，导致飞牛按 appname 识别为不同应用、升级时卸载旧应用并删除其 /config 数据目录，造成配置丢失）；现 appname 与已装基数一致，飞牛可原地升级保留数据。display_name 仍为 MoviePilot。容器名 moviepilot（无 v2），数据目录 ./moviepilot-v2/config、./moviepilot-v2/core 不变
+changelog             = 3.0.4 修复 FnOS 应用中心 10300/应用不存在：目录名与 fnpack 键改为小写 moviepilot 以匹配 manifest 的 appname（3.0.3 已把 appname 改回小写 moviepilot，3.0.0~3.0.2 误改大写 MoviePilot 导致升级卸载旧应用并删除其 /config 数据目录、造成配置丢失）。display_name 仍为 MoviePilot。容器名 moviepilot（无 v2），数据目录 ./moviepilot-v2/config、./moviepilot-v2/core 不变
 install_dep_apps      =

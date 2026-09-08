@@ -16,7 +16,7 @@ on:
     paths:
       - 'fnpack.json'
       - 'traefik/**'
-      - 'MoviePilot/**'
+      - 'moviepilot/**'
       - 'scripts/build_fpk.sh'
       - '.github/workflows/publish.yml'
   # 手动触发：在 Actions 页点 “Run workflow”。

@@ -14,10 +14,10 @@
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vtraefik-1.1.1/traefik_all.fpk",
     "changelog": "修复安装失败(10266 too many colons)：compose 卷改为整块 ${TRIM_DATA_SHARE_PATHS}:/data 挂载；配置统一落到 /data；修正 ACME CA(prod/staging) 注入"
   },
-  "MoviePilot": {
+  "moviepilot": {
     "display_name": "MoviePilot",
     "platform": "all",
-    "version": "3.0.3",
+    "version": "3.0.4",
     "desc": "NAS媒体库自动化管理工具，基于Jackett和Plex",
     "labels": "媒体,自动化,下载",
     "distributor": "narrator-z",
@@ -26,7 +26,7 @@
     "install_type": "系统空间",
     "isdocker": "true",
     "size": "22.10KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-3.0.3/MoviePilot_all.fpk",
-    "changelog": "3.0.3 关键修复：appname 改回小写 moviepilot（3.0.0~3.0.2 误改大写 MoviePilot 导致飞牛识别为不同应用、升级卸载旧应用并删除其配置数据目录造成配置丢失）；现 appname 与已装基数一致，飞牛可原地升级保留数据。display_name 仍为 MoviePilot"
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vmoviepilot-3.0.4/moviepilot_all.fpk",
+    "changelog": "3.0.4 修复 FnOS 应用中心报 10300/应用不存在：目录名与 fnpack 键由 MoviePilot(大写) 改为 moviepilot(小写)，与 manifest 的 appname 一致，飞牛才能按 appname 正确定位应用。3.0.3 已把 appname 改回小写 moviepilot（3.0.0~3.0.2 误改大写 MoviePilot 导致升级卸载旧应用并删除其配置数据目录、造成配置丢失）；display_name 仍为 MoviePilot。"
   }
 }
