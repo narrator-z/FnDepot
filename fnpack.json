@@ -25,7 +25,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.68KB",
+    "size": "21.97KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-3.0.2/MoviePilot_all.fpk",
     "changelog": "升级到 v3.0.2：升级前自动停掉旧容器 moviepilot-v2，修复 host 模式端口(20669/47901)被旧容器占用导致升级后新容器无法启动；容器名 moviepilot（去v2），数据与配置目录不变"
   }
