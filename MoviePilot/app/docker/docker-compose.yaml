@@ -3,8 +3,8 @@ services:
   moviepilot:
     stdin_open: true
     tty: true
-    container_name: moviepilot-v2
-    hostname: moviepilot-v2
+    container_name: moviepilot
+    hostname: moviepilot
     network_mode: host
     volumes:
       - './media:/media'

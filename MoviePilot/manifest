@@ -15,5 +15,5 @@ service_port          = 20669
 disable_authorization_path = false
 desktop_uidir         = ui
 desktop_applaunchname = MoviePilot.Application
-changelog             = 修复 16001 安装失败：对齐 UCKETX 可工作配置——install_init 去掉 docker 检查；config/privilege 改为 docker-moviepilot；config/resource 补 data-share；移除 manifest 的 platform/os_max_version/checkport 以免版本上限与端口误判；镜像地址不变
+changelog             = 升级到 v3：版本号从 v3 起（3.0.0）；容器名去除 v2（moviepilot-v2→moviepilot）；保留历史配置数据目录（./moviepilot-v2/config、./moviepilot-v2/core 不变），升级不影响既有配置与数据
 install_dep_apps      =
