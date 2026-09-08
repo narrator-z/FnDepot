@@ -17,7 +17,7 @@
   "MoviePilot": {
     "display_name": "MoviePilot",
     "platform": "all",
-    "version": "3.0.1",
+    "version": "3.0.2",
     "desc": "NAS媒体库自动化管理工具，基于Jackett和Plex",
     "labels": "媒体,自动化,下载",
     "distributor": "narrator-z",
@@ -25,8 +25,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "21.63KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-3.0.1/MoviePilot_all.fpk",
-    "changelog": "升级到 v3（3.0.1）：容器名去除 v2（moviepilot-v2→moviepilot），manifest 版本与包版本对齐，数据与配置目录不变，升级不影响历史配置"
+    "size": "21.68KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vMoviePilot-3.0.2/MoviePilot_all.fpk",
+    "changelog": "升级到 v3.0.2：升级前自动停掉旧容器 moviepilot-v2，修复 host 模式端口(20669/47901)被旧容器占用导致升级后新容器无法启动；容器名 moviepilot（去v2），数据与配置目录不变"
   }
 }

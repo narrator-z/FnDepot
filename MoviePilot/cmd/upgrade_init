@@ -1,3 +1,18 @@
 #!/bin/bash
-# 升级前：保留配置与数据
+# 升级前：保留配置与数据，并停掉旧版本容器（moviepilot-v2）
+# 原因：从 v2.14.7 升级时容器名由 moviepilot-v2 改为 moviepilot，
+# FnOS 基于新 compose 无法自动停止旧容器，导致 host 模式端口(20669/47901)
+# 被占用、新容器启动失败。此处主动停旧容器以释放端口。
+DOCKER="$(command -v docker 2>/dev/null || true)"
+[ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
+[ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
+OLD=moviepilot-v2
+if [ -n "$DOCKER" ]; then
+  ID="$($DOCKER ps -aq --filter "name=^/${OLD}$" 2>/dev/null)"
+  if [ -n "$ID" ]; then
+    $DOCKER stop "$OLD" >/dev/null 2>&1 || true
+    $DOCKER rm -f "$OLD" >/dev/null 2>&1 || true
+  fi
+fi
 exit 0
+
