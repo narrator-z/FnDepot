@@ -1,8 +1,29 @@
 [
   {
-    "stepTitle": "管理员密码",
+    "stepTitle": "管理员账号",
     "items": [
-      { "type": "tips", "helpText": "MoviePilot V3 的密码只保存在应用数据库中，无法通过安装配置重置。请在应用内「用户 / 安全设置」中修改密码；若已无法登录，需重置 /config 下的 user.db 后重新初始化。" }
+      {
+        "type": "text",
+        "field": "moviepilot_admin_username",
+        "label": "管理员用户名",
+        "initValue": "admin",
+        "helpText": "尚未创建超级管理员时，修改并保存后会自动用该账号建号；已创建后改这里不会影响已有账号（改名请在 MoviePilot 应用内「用户」中操作）。",
+        "rules": [
+          { "required": true, "message": "请输入管理员用户名" },
+          { "pattern": "^[a-zA-Z0-9_]+$", "message": "用户名只能包含字母、数字和下划线" }
+        ]
+      },
+      {
+        "type": "password",
+        "field": "moviepilot_admin_password",
+        "label": "管理员密码",
+        "helpText": "仅在尚未创建超级管理员时用于自动建号（6-50 位，至少含字母、数字、特殊字符中的两类）。已有账号后要改密码，请在 MoviePilot 应用内「用户」里修改。",
+        "rules": [
+          { "required": true, "message": "请输入管理员密码" },
+          { "min": 6, "message": "密码长度不能少于 6 位" }
+        ]
+      },
+      { "type": "tips", "helpText": "说明：MoviePilot V3 的密码只保存在数据库里，无法从安装配置重置；若忘记密码，需在应用内找回或重置数据库。" }
     ]
   }
 ]

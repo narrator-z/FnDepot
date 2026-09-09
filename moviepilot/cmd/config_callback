@@ -1,5 +1,148 @@
 #!/bin/bash
+# 应用设置（配置）变更后：同安装后逻辑 —— 若尚未创建超级管理员，用设置里填写的
+# 账号密码调用 MoviePilot 官方初始化接口建号；已初始化则跳过，绝不覆盖已有账号。
+#
+# 背景：MoviePilot V3(3.0.x) 不再从环境变量/部署配置初始化管理员密码（密码只存数据库），
+# 所以 SUPERUSER / SUPERUSER_PASSWORD 这两个环境变量对 V3 完全无效（3.0.7 之前包里
+# 就只有它们，于是用户装完还得自己到页面注册）。
+# V3 唯一受支持的建号途径是 POST /api/v1/login/initialization，也就是前端
+# “欢迎使用 MoviePilot / 创建超级管理员”页面背后调用的那个接口，这里走同一条路。
+#
+# 服务首次启动通常要几十秒（要拉起 nginx + 后端 + 迁移数据库），因此这里：
+#   1) 后台等待容器运行、接口就绪；
+#   2) 已初始化过（initialized=true）就直接跳过，绝不覆盖已有账号；
+#   3) 全程 exit 0，任何失败都不会阻塞安装。
 
-### This script is called after the user change environment variables in application setting page.
+PORT="47901"
+DOCKER="$(command -v docker 2>/dev/null || true)"
+[ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
+[ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
+[ -z "$DOCKER" ] && exit 0
+
+USER="${MP_ADMIN_USER:-}"
+PASS="${MP_ADMIN_PASSWORD:-}"
+if [ -z "$USER" ] || [ -z "$PASS" ]; then
+  sleep 5
+  [ -z "$USER" ] && USER="$($DOCKER exec moviepilot printenv SUPERUSER 2>/dev/null)"
+  [ -z "$PASS" ] && PASS="$($DOCKER exec moviepilot printenv MP_ADMIN_PASSWORD 2>/dev/null)"
+fi
+[ -z "$USER" ] && exit 0
+[ -z "$PASS" ] && exit 0
+
+# 容器内执行的初始化脚本（用容器自带的 python，不依赖宿主机有没有 python）
+cat > /tmp/moviepilot_init_superuser.py <<'PYEOF'
+import json
+import os
+import secrets
+import time
+import urllib.request
+import urllib.error
+
+PORT = os.environ.get("MP_PORT", "47901")
+USER = (os.environ.get("MP_ADMIN_USER") or "").strip()
+PASS = os.environ.get("MP_ADMIN_PASSWORD") or ""
+BASE = "http://127.0.0.1:%s/api/v1/login/initialization" % PORT
+
+
+def call(method, payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(
+        BASE,
+        data=data,
+        method=method,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return resp.status, json.loads(resp.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read() or b"{}")
+        except Exception:
+            return e.code, {}
+    except Exception:
+        return 0, {}
+
+
+deadline = time.time() + 900
+while time.time() < deadline:
+    code, body = call("GET")
+    if code == 200:
+        if (body.get("data") or {}).get("initialized"):
+            break
+        key = secrets.token_hex(16)
+        code, body = call(
+            "POST",
+            {
+                "username": USER,
+                "password": PASS,
+                "confirm_password": PASS,
+                "api_key": key,
+            },
+        )
+        if code != 200:
+            # 用户填写的密码不满足接口复杂度要求时，退化为自动生成合规密码，
+            # 保证装完一定有可登录的账号，并把密码明文写到 /config 供查看后自行修改。
+            import string
+
+            alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+            while True:
+                generated = "".join(secrets.choice(alphabet) for _ in range(16))
+                if any(c.isalpha() for c in generated) and any(c.isdigit() for c in generated):
+                    break
+            code, body = call(
+                "POST",
+                {
+                    "username": USER,
+                    "password": generated,
+                    "confirm_password": generated,
+                    "api_key": key,
+                },
+            )
+            if code == 200:
+                for path in ("/tmp/moviepilot_superuser_password.txt", "/config/admin_password.txt"):
+                    try:
+                        open(path, "w").write(generated + "\n")
+                    except Exception:
+                        pass
+        if code == 200:
+            for path in ("/tmp/moviepilot_superuser_apikey.txt", "/config/api_key.txt"):
+                try:
+                    open(path, "w").write(key + "\n")
+                except Exception:
+                    pass
+        else:
+            try:
+                open("/config/superuser_init_failed.txt", "w").write(
+                    "%s\n" % json.dumps(body, ensure_ascii=False)
+                )
+            except Exception:
+                pass
+        break
+    time.sleep(5)
+PYEOF
+
+# 宿主机侧的后台等待器：等容器起来后把脚本拷进去执行
+cat > /tmp/moviepilot_init_runner.sh <<'EOS'
+DOCKER="$1"
+PORT="$2"
+RUN=""
+for i in $(seq 1 180); do
+  RUN="$($DOCKER inspect -f '{{.State.Running}}' moviepilot 2>/dev/null)"
+  [ "$RUN" = "true" ] && break
+  sleep 5
+done
+[ "$RUN" != "true" ] && exit 0
+$DOCKER cp /tmp/moviepilot_init_superuser.py moviepilot:/tmp/moviepilot_init_superuser.py >/dev/null 2>&1
+$DOCKER exec -d \
+  -e MP_ADMIN_USER="$MP_ADMIN_USER" \
+  -e MP_ADMIN_PASSWORD="$MP_ADMIN_PASSWORD" \
+  -e MP_PORT="$PORT" \
+  moviepilot python3 /tmp/moviepilot_init_superuser.py >/dev/null 2>&1
+exit 0
+EOS
+
+MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" \
+  nohup sh /tmp/moviepilot_init_runner.sh "$DOCKER" "$PORT" >/dev/null 2>&1 &
 
 exit 0
