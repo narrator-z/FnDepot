@@ -1,36 +1,37 @@
 #!/bin/bash
-# 升级后：补做一次管理员初始化。FnOS 升级不会重跑 install_callback，所以这里兜底。
-# 若已经创建过超级管理员则直接跳过，绝不覆盖已有账号；尚未建号则用当前配置补齐。
-# 实现细节（字段名环境变量 / 直连 127.0.0.1 无需 docker）见 install_callback 头部注释。
+# 升级后：补做一次管理员初始化。FnOS 升级不重跑 install_callback，故这里兜底。
+# 已存在超级管理员则跳过，绝不覆盖；尚未建号则用当前配置补齐。
+# 实现要点（字段名环境变量取值 / 直连 127.0.0.1 / 短试后台化避免卡安装）见 install_callback 头部。
 #
 # 背景：MoviePilot V3(3.0.x) 不再从环境变量/部署配置初始化管理员密码（密码只存数据库），
 # SUPERUSER / SUPERUSER_PASSWORD 对 V3 无效，装完还得自己到页面注册。
 # V3 唯一受支持的建号途径是 POST /api/v1/login/initialization（前端“欢迎使用
 # MoviePilot / 创建超级管理员”页面背后就是它），这里走同一条路。
 #
-# 两个关键实现细节（都是踩过坑才确定的）：
+# 关键实现细节（都是踩过坑才确定的）：
 #   1) FnOS 把向导字段的值以「字段名」注入环境变量，例如字段 moviepilot_admin_username
 #      会变成环境变量 $moviepilot_admin_username（compose 里 ${...} 也由它替换）。
-#      所以这里优先读字段名变量，而不是自己臆造的变量名。
-#   2) 容器是 network_mode: host，应用端口直接暴露在宿主机 127.0.0.1 上，
-#      因此宿主机用 python3/curl 直接调接口即可，完全不需要 docker exec ——
-#      避免了 docker 不在 PATH / 脚本执行用户无 docker 权限导致的静默失败。
+#      取值三级兜底：字段名变量 → 通用名 → docker inspect 读容器 env。
+#   2) 容器是 network_mode: host，宿主机可直接访问 127.0.0.1:<端口>，不需要 docker exec
+#      （绕开 docker 不在 PATH / 脚本执行用户无 docker 权限两类静默失败）。
+#   3) 【最重要】绝不能同步等待。FnOS 要等回调返回才会继续启动容器，而容器没起来接口
+#      就不通 —— 同步等待会形成死锁，界面一直卡在“安装中”（3.1.0 就栽在这里）。
+#      所以这里先用很短的超时试一次，没就绪就立刻 detach 到后台并马上 exit 0。
 #
 # 全程 exit 0，任何失败都不会阻塞安装。
 
 PORT="47901"
 LOG="/tmp/moviepilot_superuser_init.log"
+PY_SRC="/tmp/moviepilot_init_superuser.py"
 
 log() {
   echo "[$(date '+%F %T')] $*" >>"$LOG" 2>/dev/null
-  echo "[$(date '+%F %T')] $*" >>"${TRIM_APPDEST:-/tmp}/moviepilot_superuser_init.log" 2>/dev/null
   return 0
 }
 
 log "==== upgrade_callback 开始 ===="
 
-# ---- 1. 取得向导填写的账号密码 ----
-# 优先 FnOS 注入的字段名环境变量；再退化为通用名；最后从容器 env 反查。
+# ---- 1. 取得向导填写的账号密码（三级兜底）----
 USER="${moviepilot_admin_username:-}"
 PASS="${moviepilot_admin_password:-}"
 [ -z "$USER" ] && USER="${MP_ADMIN_USER:-}"
@@ -39,17 +40,16 @@ PASS="${moviepilot_admin_password:-}"
 [ -z "$PASS" ] && PASS="${SUPERUSER_PASSWORD:-}"
 log "env 取值: USER=${USER:-<空>} PASS_LEN=${#PASS}"
 
-# 若环境变量里没有（部分 FnOS 版本不向 cmd 脚本注入字段值），
-# 等容器起来后用 docker inspect 读取它实际拿到的环境。
 if [ -z "$USER" ] || [ -z "$PASS" ]; then
   DOCKER="$(command -v docker 2>/dev/null || true)"
   [ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
   [ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
   if [ -n "$DOCKER" ]; then
-    for _ in $(seq 1 120); do
+    RUN=""
+    for _ in $(seq 1 6); do
       RUN="$($DOCKER inspect -f '{{.State.Running}}' moviepilot 2>/dev/null)"
       [ "$RUN" = "true" ] && break
-      sleep 5
+      sleep 3
     done
     if [ "$RUN" = "true" ]; then
       CENV="$($DOCKER inspect moviepilot --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)"
@@ -57,29 +57,40 @@ if [ -z "$USER" ] || [ -z "$PASS" ]; then
       [ -z "$PASS" ] && PASS="$(printf '%s\n' "$CENV" | grep '^MP_ADMIN_PASSWORD=' | head -1 | cut -d= -f2-)"
       log "容器 env 取值: USER=${USER:-<空>} PASS_LEN=${#PASS}"
     else
-      log "容器未运行，跳过容器 env 取值"
+      log "容器暂未运行，跳过容器 env 取值（后台阶段会带着值继续）"
     fi
   else
-    log "未找到 docker 命令，跳过容器 env 取值"
+    log "未找到 docker 命令"
   fi
 fi
 
-if [ -z "$USER" ] || [ -z "$PASS" ]; then
-  log "缺少账号或密码，放弃自动建号（用户可在应用设置里补填后保存）"
+if [ -z "$USER" ]; then
+  log "缺少账号，放弃自动建号（用户仍可在应用设置里补填后保存）"
   exit 0
 fi
-
+if [ -z "$PASS" ]; then
+  log "缺少密码，放弃自动建号"
+  exit 0
+fi
 case "$USER" in
   *[!A-Za-z0-9_]*) log "用户名含非法字符，放弃"; exit 0 ;;
 esac
 
-# ---- 2. 写初始化脚本（容器自带 python3，宿主机也有）----
-PY_SRC="/tmp/moviepilot_init_superuser.py"
+# ---- 2. 宿主机 python 解释器 ----
+PY_BIN=""
+for c in python3 python /usr/bin/python3 /usr/local/bin/python3; do
+  if [ -x "$c" ]; then PY_BIN="$c"; break; fi
+  if command -v "$c" >/dev/null 2>&1; then PY_BIN="$(command -v "$c")"; break; fi
+done
+[ -z "$PY_BIN" ] && { log "宿主机无 python，放弃"; exit 0; }
+
+# ---- 3. 初始化脚本 ----
 cat >"$PY_SRC" <<'PYEOF'
 import json
 import os
 import secrets
 import string
+import sys
 import time
 import urllib.request
 import urllib.error
@@ -87,8 +98,13 @@ import urllib.error
 PORT = os.environ.get("MP_PORT", "47901")
 USER = (os.environ.get("MP_ADMIN_USER") or "").strip()
 PASS = os.environ.get("MP_ADMIN_PASSWORD") or ""
+TIMEOUT = int(os.environ.get("MP_INIT_TIMEOUT", "600"))
 BASE = "http://127.0.0.1:%s/api/v1/login/initialization" % PORT
 LOG = os.environ.get("MP_INIT_LOG", "/tmp/moviepilot_superuser_init.log")
+
+EXIT_OK = 0
+EXIT_NOT_READY = 3
+EXIT_FAILED = 4
 
 
 def log(msg):
@@ -117,107 +133,92 @@ def call(method, payload=None):
 
 
 def ok_password(p):
-    return (
-        6 <= len(p) <= 50
-        and sum(
-            [
-                any(c.isalpha() for c in p),
-                any(c.isdigit() for c in p),
-                any(not c.isalnum() for c in p),
-            ]
-        )
-        >= 2
-    )
+    if not (6 <= len(p) <= 50):
+        return False
+    kinds = [
+        any(c.isalpha() for c in p),
+        any(c.isdigit() for c in p),
+        any(not c.isalnum() for c in p),
+    ]
+    return sum(kinds) >= 2
 
 
-deadline = time.time() + 600
-while time.time() < deadline:
-    code, body = call("GET")
-    if code == 200:
-        log("GET ok: %s" % json.dumps(body))
-        if (body.get("data") or {}).get("initialized"):
-            log("已初始化，跳过（绝不覆盖已有账号）")
-            break
-        key = secrets.token_hex(16)
-        password = PASS
-        if not ok_password(password):
-            # 用户填的密码不满足接口复杂度要求时，自动生成合规密码，
-            # 保证装完一定有可登录的账号，并把明文写到 /config 供查看后自行修改。
-            alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-            while True:
-                generated = "".join(secrets.choice(alphabet) for _ in range(16))
-                if ok_password(generated):
-                    break
-            password = generated
-            for path in ("/tmp/moviepilot_superuser_password.txt", "/config/admin_password.txt"):
-                try:
-                    open(path, "w").write(generated + "\n")
-                except Exception:
-                    pass
-            log("原密码不合规则，已生成随机密码并写入 /config/admin_password.txt")
-        code, body = call(
-            "POST",
-            {
-                "username": USER,
-                "password": password,
-                "confirm_password": password,
-                "api_key": key,
-            },
-        )
-        log("POST -> %s %s" % (code, json.dumps(body, ensure_ascii=False)[:300]))
+def main():
+    deadline = time.time() + TIMEOUT
+    while time.time() < deadline:
+        code, body = call("GET")
         if code == 200:
-            for path in ("/tmp/moviepilot_superuser_apikey.txt", "/config/api_key.txt"):
-                try:
-                    open(path, "w").write(key + "\n")
-                except Exception:
-                    pass
-        break
-    time.sleep(5)
-else:
-    log("等待接口就绪超时")
+            log("GET ok: %s" % json.dumps(body))
+            if (body.get("data") or {}).get("initialized"):
+                log("已初始化，跳过（绝不覆盖已有账号）")
+                return EXIT_OK
+            key = secrets.token_hex(16)
+            password = PASS
+            if not ok_password(password):
+                alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+                while True:
+                    generated = "".join(secrets.choice(alphabet) for _ in range(16))
+                    if ok_password(generated):
+                        break
+                password = generated
+                for path in (
+                    "/tmp/moviepilot_superuser_password.txt",
+                    "/config/admin_password.txt",
+                ):
+                    try:
+                        open(path, "w").write(generated + "\n")
+                    except Exception:
+                        pass
+                log("原密码不合规则，已生成随机密码写入 /config/admin_password.txt")
+            code, body = call(
+                "POST",
+                {
+                    "username": USER,
+                    "password": password,
+                    "confirm_password": password,
+                    "api_key": key,
+                },
+            )
+            log("POST -> %s %s" % (code, json.dumps(body, ensure_ascii=False)[:300]))
+            if code == 200:
+                for path in (
+                    "/tmp/moviepilot_superuser_apikey.txt",
+                    "/config/api_key.txt",
+                ):
+                    try:
+                        open(path, "w").write(key + "\n")
+                    except Exception:
+                        pass
+                return EXIT_OK
+            return EXIT_FAILED
+        time.sleep(5)
+    log("等待接口就绪超时（%ss）" % TIMEOUT)
+    return EXIT_NOT_READY
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 PYEOF
 
-# ---- 3. 执行：优先用宿主机 python3（无需 docker），否则退回容器内执行 ----
-run_host() {
-  PY_BIN=""
-  for c in python3 python /usr/bin/python3 /usr/local/bin/python3; do
-    if command -v "$c" >/dev/null 2>&1; then PY_BIN="$(command -v "$c")"; break; fi
-    if [ -x "$c" ]; then PY_BIN="$c"; break; fi
-  done
-  [ -z "$PY_BIN" ] && return 1
-  MP_PORT="$PORT" MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" MP_INIT_LOG="$LOG" \
-    "$PY_BIN" "$PY_SRC" >/dev/null 2>&1
-  return 0
-}
+# ---- 4. 先短试一次（10s）：接口已就绪就秒完成，不拖慢安装 ----
+rc=0
+MP_PORT="$PORT" MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" \
+  MP_INIT_LOG="$LOG" MP_INIT_TIMEOUT=10 \
+  "$PY_BIN" "$PY_SRC" >/dev/null 2>&1 || rc=$?
+log "首次尝试 rc=$rc"
+[ "$rc" = "0" ] && { log "首次尝试即完成"; exit 0; }
 
-if run_host; then
-  log "已在宿主机执行初始化脚本"
-  exit 0
-fi
-
-DOCKER="$(command -v docker 2>/dev/null || true)"
-[ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
-[ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
-if [ -n "$DOCKER" ]; then
-  for _ in $(seq 1 120); do
-    RUN="$($DOCKER inspect -f '{{.State.Running}}' moviepilot 2>/dev/null)"
-    [ "$RUN" = "true" ] && break
-    sleep 5
-  done
-  if [ "$RUN" = "true" ]; then
-    $DOCKER cp "$PY_SRC" moviepilot:/tmp/moviepilot_init_superuser.py >/dev/null 2>&1
-    $DOCKER exec -d \
-      -e MP_ADMIN_USER="$USER" \
-      -e MP_ADMIN_PASSWORD="$PASS" \
-      -e MP_PORT="$PORT" \
-      -e MP_INIT_LOG=/tmp/moviepilot_superuser_init.log \
-      moviepilot python3 /tmp/moviepilot_init_superuser.py >/dev/null 2>&1
-    log "已通过容器执行初始化脚本"
-  else
-    log "容器未运行，无法执行初始化"
-  fi
+# ---- 5. 未就绪 → detach 到后台继续，立即返回，绝不阻塞安装 ----
+if command -v setsid >/dev/null 2>&1; then
+  setsid env MP_PORT="$PORT" MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" \
+    MP_INIT_LOG="$LOG" MP_INIT_TIMEOUT=900 \
+    "$PY_BIN" "$PY_SRC" >/dev/null 2>&1 </dev/null &
 else
-  log "既无 python3 也无 docker，无法执行初始化"
+  nohup env MP_PORT="$PORT" MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" \
+    MP_INIT_LOG="$LOG" MP_INIT_TIMEOUT=900 \
+    "$PY_BIN" "$PY_SRC" >/dev/null 2>&1 </dev/null &
 fi
+disown 2>/dev/null || true
+log "已转入后台继续（最长900s），回调立即返回"
 
 exit 0
