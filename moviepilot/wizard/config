@@ -1,16 +1,8 @@
 [
   {
-    "stepTitle": "重置管理员密码",
+    "stepTitle": "管理员密码",
     "items": [
-      {
-        "type": "password",
-        "field": "wizard_moviepilot_admin_password",
-        "label": "新管理员密码（留空则保持原密码）",
-        "initValue": "",
-        "rules": [
-          { "min": 8, "message": "密码长度不能少于 8 位" }
-        ]
-      }
+      { "type": "tips", "helpText": "MoviePilot V3 的密码只保存在应用数据库中，无法通过安装配置重置。请在应用内「用户 / 安全设置」中修改密码；若已无法登录，需重置 /config 下的 user.db 后重新初始化。" }
     ]
   }
 ]
