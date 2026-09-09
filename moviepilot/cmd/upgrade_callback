@@ -1,28 +1,36 @@
 #!/bin/bash
-# 升级后：补做一次管理员初始化。FnOS 升级不重跑 install_callback，故这里兜底。
-# 已存在超级管理员则跳过，绝不覆盖；尚未建号则用当前配置补齐。
-# 实现要点（字段名环境变量取值 / 直连 127.0.0.1 / 短试后台化避免卡安装）见 install_callback 头部。
+# 升级后：补做一次管理员初始化/密码同步。FnOS 升级不重跑 install_callback，故这里兜底。
 #
-# 背景：MoviePilot V3(3.0.x) 不再从环境变量/部署配置初始化管理员密码（密码只存数据库），
+# 背景：MoviePilot V3(3.0.x) 不从环境变量初始化管理员密码（密码只存数据库），
 # SUPERUSER / SUPERUSER_PASSWORD 对 V3 无效，装完还得自己到页面注册。
-# V3 唯一受支持的建号途径是 POST /api/v1/login/initialization（前端“欢迎使用
-# MoviePilot / 创建超级管理员”页面背后就是它），这里走同一条路。
+# V3 建号的官方途径是 POST /api/v1/login/initialization（前端“欢迎使用 MoviePilot /
+# 创建超级管理员”页面背后就是它）；改密则走 POST /api/v1/login/access-token 登录 +
+# PUT /api/v1/user/。
 #
 # 关键实现细节（都是踩过坑才确定的）：
 #   1) FnOS 把向导字段的值以「字段名」注入环境变量，例如字段 moviepilot_admin_username
-#      会变成环境变量 $moviepilot_admin_username（compose 里 ${...} 也由它替换）。
+#      会变成 $moviepilot_admin_username（compose 里的 ${...} 也由它替换）。
 #      取值三级兜底：字段名变量 → 通用名 → docker inspect 读容器 env。
-#   2) 容器是 network_mode: host，宿主机可直接访问 127.0.0.1:<端口>，不需要 docker exec
+#   2) 容器是 network_mode: host，宿主机直接访问 127.0.0.1:<端口>，不需要 docker exec
 #      （绕开 docker 不在 PATH / 脚本执行用户无 docker 权限两类静默失败）。
 #   3) 【最重要】绝不能同步等待。FnOS 要等回调返回才会继续启动容器，而容器没起来接口
 #      就不通 —— 同步等待会形成死锁，界面一直卡在“安装中”（3.1.0 就栽在这里）。
-#      所以这里先用很短的超时试一次，没就绪就立刻 detach 到后台并马上 exit 0。
+#      所以先短试一次，没就绪就立刻转后台并马上 exit 0。
+#   4) 后台不能只靠 setsid：FnOS 在回调返回后会清掉进程组（3.1.1 的后台进程活不下来，
+#      日志里转后台后再无任何输出）。现在优先注册 crontab 每 2 分钟跑一次，完成后自删；
+#      没有 crontab 时退回 setsid/nohup。
+#   5) 已初始化时不再是「直接跳过」：3.1.1 及之前只在首次建号时写一次密码，之后在应用
+#      设置里改密码完全不生效（本版本的修复点）。现在会用旧密码登录并把密码改成当前配置
+#      值，旧密码来源 = 上次成功写入的状态文件 / 容器 env 里的旧 MP_ADMIN_PASSWORD
+#      （FnOS 先跑回调再重建容器，此时 inspect 到的仍是旧值）。
 #
-# 全程 exit 0，任何失败都不会阻塞安装。
+# 全程 exit 0，任何失败都不会阻塞安装/升级。
 
 PORT="47901"
 LOG="/tmp/moviepilot_superuser_init.log"
 PY_SRC="/tmp/moviepilot_init_superuser.py"
+WRAP="/tmp/moviepilot_init_superuser.sh"
+STATE="/tmp/moviepilot_superuser_state"
 
 log() {
   echo "[$(date '+%F %T')] $*" >>"$LOG" 2>/dev/null
@@ -40,25 +48,23 @@ PASS="${moviepilot_admin_password:-}"
 [ -z "$PASS" ] && PASS="${SUPERUSER_PASSWORD:-}"
 log "env 取值: USER=${USER:-<空>} PASS_LEN=${#PASS}"
 
-if [ -z "$USER" ] || [ -z "$PASS" ]; then
+# 旧密码：状态文件优先（上次成功写入的值）
+OLD_PASS=""
+[ -s "$STATE" ] && OLD_PASS="$(head -1 "$STATE" 2>/dev/null)"
+
+DOCKER=""
+if [ -z "$USER" ] || [ -z "$PASS" ] || [ -z "$OLD_PASS" ]; then
   DOCKER="$(command -v docker 2>/dev/null || true)"
   [ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
   [ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
   if [ -n "$DOCKER" ]; then
-    RUN=""
-    for _ in $(seq 1 6); do
-      RUN="$($DOCKER inspect -f '{{.State.Running}}' moviepilot 2>/dev/null)"
-      [ "$RUN" = "true" ] && break
-      sleep 3
-    done
-    if [ "$RUN" = "true" ]; then
-      CENV="$($DOCKER inspect moviepilot --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)"
-      [ -z "$USER" ] && USER="$(printf '%s\n' "$CENV" | grep '^SUPERUSER=' | head -1 | cut -d= -f2-)"
-      [ -z "$PASS" ] && PASS="$(printf '%s\n' "$CENV" | grep '^MP_ADMIN_PASSWORD=' | head -1 | cut -d= -f2-)"
-      log "容器 env 取值: USER=${USER:-<空>} PASS_LEN=${#PASS}"
-    else
-      log "容器暂未运行，跳过容器 env 取值（后台阶段会带着值继续）"
-    fi
+    CENV="$($DOCKER inspect moviepilot --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)"
+    [ -z "$USER" ] && USER="$(printf '%s\n' "$CENV" | grep '^SUPERUSER=' | head -1 | cut -d= -f2-)"
+    [ -z "$PASS" ] && PASS="$(printf '%s\n' "$CENV" | grep '^MP_ADMIN_PASSWORD=' | head -1 | cut -d= -f2-)"
+    [ -z "$OLD_PASS" ] && OLD_PASS="$(printf '%s\n' "$CENV" | grep '^MP_ADMIN_PASSWORD=' | head -1 | cut -d= -f2-)"
+    CP="$(printf '%s\n' "$CENV" | grep '^PORT=' | head -1 | cut -d= -f2-)"
+    case "$CP" in ''|*[!0-9]*) ;; *) PORT="$CP" ;; esac
+    log "容器 env 取值: USER=${USER:-<空>} PASS_LEN=${#PASS} OLD_LEN=${#OLD_PASS} PORT=$PORT"
   else
     log "未找到 docker 命令"
   fi
@@ -84,7 +90,7 @@ for c in python3 python /usr/bin/python3 /usr/local/bin/python3; do
 done
 [ -z "$PY_BIN" ] && { log "宿主机无 python，放弃"; exit 0; }
 
-# ---- 3. 初始化脚本 ----
+# ---- 3. 初始化/改密脚本 ----
 cat >"$PY_SRC" <<'PYEOF'
 import json
 import os
@@ -92,14 +98,20 @@ import secrets
 import string
 import sys
 import time
-import urllib.request
+import urllib.parse
 import urllib.error
+import urllib.request
 
 PORT = os.environ.get("MP_PORT", "47901")
 USER = (os.environ.get("MP_ADMIN_USER") or "").strip()
 PASS = os.environ.get("MP_ADMIN_PASSWORD") or ""
+OLD = os.environ.get("MP_OLD_PASSWORD") or ""
+STATE = os.environ.get("MP_STATE_FILE", "/tmp/moviepilot_superuser_state")
 TIMEOUT = int(os.environ.get("MP_INIT_TIMEOUT", "600"))
-BASE = "http://127.0.0.1:%s/api/v1/login/initialization" % PORT
+BASE = "http://127.0.0.1:%s" % PORT
+INIT_URL = BASE + "/api/v1/login/initialization"
+LOGIN_URL = BASE + "/api/v1/login/access-token"
+USER_URL = BASE + "/api/v1/user/"
 LOG = os.environ.get("MP_INIT_LOG", "/tmp/moviepilot_superuser_init.log")
 
 EXIT_OK = 0
@@ -115,14 +127,25 @@ def log(msg):
         pass
 
 
-def call(method, payload=None):
-    data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(
-        BASE, data=data, method=method, headers={"Content-Type": "application/json"}
-    )
+def request(url, method="GET", payload=None, form=None, token=None):
+    headers = {}
+    data = None
+    if form is not None:
+        data = urllib.parse.urlencode(form).encode()
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    elif payload is not None:
+        data = json.dumps(payload).encode()
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=8) as r:
-            return r.status, json.loads(r.read() or b"{}")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = r.read() or b"{}"
+            try:
+                return r.status, json.loads(raw)
+            except Exception:
+                return r.status, {}
     except urllib.error.HTTPError as e:
         try:
             return e.code, json.loads(e.read() or b"{}")
@@ -130,6 +153,20 @@ def call(method, payload=None):
             return e.code, {}
     except Exception as e:
         return 0, {"err": str(e)}
+
+
+def extract_token(body):
+    if not isinstance(body, dict):
+        return None
+    for key in ("access_token", "token"):
+        if body.get(key):
+            return body[key]
+    data = body.get("data")
+    if isinstance(data, dict):
+        for key in ("access_token", "token"):
+            if data.get(key):
+                return data[key]
+    return None
 
 
 def ok_password(p):
@@ -143,82 +180,241 @@ def ok_password(p):
     return sum(kinds) >= 2
 
 
-def main():
+def read_state():
+    try:
+        with open(STATE) as f:
+            return f.readline().strip()
+    except Exception:
+        return ""
+
+
+def save_state(value):
+    try:
+        with open(STATE, "w") as f:
+            f.write(value + "\n")
+        os.chmod(STATE, 0o600)
+    except Exception:
+        pass
+
+
+def write_password_file(text):
+    for path in ("/tmp/moviepilot_superuser_password.txt", "/config/admin_password.txt"):
+        try:
+            with open(path, "w") as f:
+                f.write(text + "\n")
+        except Exception:
+            pass
+
+
+def wait_ready():
     deadline = time.time() + TIMEOUT
     while time.time() < deadline:
-        code, body = call("GET")
+        code, body = request(INIT_URL, "GET")
         if code == 200:
-            log("GET ok: %s" % json.dumps(body))
-            if (body.get("data") or {}).get("initialized"):
-                log("已初始化，跳过（绝不覆盖已有账号）")
-                return EXIT_OK
-            key = secrets.token_hex(16)
-            password = PASS
-            if not ok_password(password):
-                alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-                while True:
-                    generated = "".join(secrets.choice(alphabet) for _ in range(16))
-                    if ok_password(generated):
-                        break
-                password = generated
-                for path in (
-                    "/tmp/moviepilot_superuser_password.txt",
-                    "/config/admin_password.txt",
-                ):
-                    try:
-                        open(path, "w").write(generated + "\n")
-                    except Exception:
-                        pass
-                log("原密码不合规则，已生成随机密码写入 /config/admin_password.txt")
-            code, body = call(
-                "POST",
-                {
-                    "username": USER,
-                    "password": password,
-                    "confirm_password": password,
-                    "api_key": key,
-                },
-            )
-            log("POST -> %s %s" % (code, json.dumps(body, ensure_ascii=False)[:300]))
-            if code == 200:
-                for path in (
-                    "/tmp/moviepilot_superuser_apikey.txt",
-                    "/config/api_key.txt",
-                ):
-                    try:
-                        open(path, "w").write(key + "\n")
-                    except Exception:
-                        pass
-                return EXIT_OK
-            return EXIT_FAILED
+            return body
         time.sleep(5)
-    log("等待接口就绪超时（%ss）" % TIMEOUT)
-    return EXIT_NOT_READY
+    return None
+
+
+def login(password):
+    code, body = request(LOGIN_URL, "POST", form={"username": USER, "password": password})
+    if code != 200:
+        return code, None, body
+    return code, extract_token(body), body
+
+
+def do_init():
+    """首次建号：调用官方初始化接口。"""
+    key = secrets.token_hex(16)
+    password = PASS
+    if not ok_password(password):
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        while True:
+            generated = "".join(secrets.choice(alphabet) for _ in range(16))
+            if ok_password(generated):
+                break
+        password = generated
+        write_password_file(generated)
+        log("配置密码不合规则(需6-50位且含字母/数字/特殊字符中至少两类)，已生成随机密码写入 /config/admin_password.txt")
+    code, body = request(
+        INIT_URL,
+        "POST",
+        payload={
+            "username": USER,
+            "password": password,
+            "confirm_password": password,
+            "api_key": key,
+        },
+    )
+    log("初始化 POST -> %s %s" % (code, json.dumps(body, ensure_ascii=False)[:300]))
+    if code == 200:
+        for path in ("/tmp/moviepilot_superuser_apikey.txt", "/config/api_key.txt"):
+            try:
+                with open(path, "w") as f:
+                    f.write(key + "\n")
+            except Exception:
+                pass
+        save_state(PASS if password == PASS else password)
+        log("建号成功")
+        return EXIT_OK
+    return EXIT_FAILED
+
+
+def change_password(token, new_password):
+    code, body = request(USER_URL, "GET", token=token)
+    if code != 200:
+        return False, "读取用户列表失败 %s" % code
+    users = body.get("data") if isinstance(body, dict) else body
+    if not isinstance(users, list):
+        users = []
+    target = None
+    for item in users:
+        if isinstance(item, dict) and item.get("is_superuser") and item.get("name") == USER:
+            target = item
+            break
+    if target is None:
+        for item in users:
+            if isinstance(item, dict) and item.get("is_superuser"):
+                target = item
+                break
+    if target is None:
+        return False, "未找到超级管理员，放弃改密"
+    payload = dict(target)
+    payload.pop("hashed_password", None)
+    payload["password"] = new_password
+    code, body = request(USER_URL, "PUT", payload=payload, token=token)
+    ok = code == 200 and body.get("success") is not False
+    return ok, "%s %s" % (code, json.dumps(body, ensure_ascii=False)[:200])
+
+
+def sync_password():
+    """已初始化：把当前配置的密码同步进去。"""
+    log("已初始化，检查配置密码是否已生效")
+    code, token, body = login(PASS)
+    if token:
+        log("配置密码已可正常登录，无需改动")
+        save_state(PASS)
+        return EXIT_OK
+    log("配置密码登录失败: %s %s" % (code, json.dumps(body, ensure_ascii=False)[:150]))
+
+    if not ok_password(PASS):
+        log("配置密码不合规则(需6-50位且含字母/数字/特殊字符中至少两类)，拒绝写入")
+        return EXIT_OK
+
+    candidates = []
+    if OLD:
+        candidates.append(("回调传入", OLD))
+    saved = read_state()
+    if saved and saved != OLD:
+        candidates.append(("状态文件", saved))
+    for source, old_password in candidates:
+        if not old_password or old_password == PASS:
+            continue
+        code, token, body = login(old_password)
+        if not token:
+            log("旧密码(%s)登录失败: %s" % (source, code))
+            continue
+        ok, msg = change_password(token, PASS)
+        log("用旧密码(%s)改密 -> %s" % (source, msg))
+        if not ok:
+            return EXIT_FAILED
+        code2, token2, _ = login(PASS)
+        if token2:
+            save_state(PASS)
+            log("密码已更新为应用设置中配置的值")
+            return EXIT_OK
+        log("改密后新密码仍无法登录: %s" % code2)
+        return EXIT_FAILED
+
+    # 最后兜底：用首次建号时保存的 api_key 直接调改密接口。
+    # 老版本（<=3.1.1）建号后不保存密码，只留了 api_key，这种情况下它是唯一能救活的凭据。
+    for path in ("/tmp/moviepilot_superuser_apikey.txt", "/config/api_key.txt"):
+        apikey = ""
+        try:
+            with open(path) as f:
+                apikey = f.readline().strip()
+        except Exception:
+            apikey = ""
+        if not apikey:
+            continue
+        ok, msg = change_password(apikey, PASS)
+        log("用 api_key(%s) 改密 -> %s" % (path, msg))
+        if not ok:
+            continue
+        code2, token2, _ = login(PASS)
+        if token2:
+            save_state(PASS)
+            log("密码已通过 api_key 更新为应用设置中配置的值")
+            return EXIT_OK
+        log("api_key 改密后新密码仍无法登录: %s" % code2)
+
+    log("没有任何可用凭据，无法自动改密（老版本建号后未保存密码/凭据时会出现）；"
+        "请到 MoviePilot 网页端『设置 - 用户』修改，或卸载重装时重新填写")
+    return EXIT_OK
+
+
+def main():
+    body = wait_ready()
+    if body is None:
+        log("等待接口就绪超时（%ss）" % TIMEOUT)
+        return EXIT_NOT_READY
+    data = body.get("data") if isinstance(body, dict) else {}
+    if not (data or {}).get("initialized"):
+        log("接口返回未初始化，开始建号")
+        return do_init()
+    return sync_password()
 
 
 if __name__ == "__main__":
     sys.exit(main())
 PYEOF
 
-# ---- 4. 先短试一次（10s）：接口已就绪就秒完成，不拖慢安装 ----
+q() { printf "%s" "$1" | sed "s/'/'\\''/g"; }
+
+# ---- 4. 后台 wrapper（供 crontab / setsid 复用，可重复执行直到成功）----
+cat >"$WRAP" <<WEOF
+#!/bin/bash
+export MP_PORT="$PORT"
+export MP_ADMIN_USER='$(q "$USER")'
+export MP_ADMIN_PASSWORD='$(q "$PASS")'
+export MP_OLD_PASSWORD='$(q "$OLD_PASS")'
+export MP_STATE_FILE="$STATE"
+export MP_INIT_LOG="$LOG"
+export MP_INIT_TIMEOUT=60
+TRY=/tmp/moviepilot_init_try
+n=\$(cat \$TRY 2>/dev/null || echo 0); n=\$((n+1)); echo \$n > \$TRY
+"$PY_BIN" "$PY_SRC" >/dev/null 2>&1
+rc=\$?
+if [ "\$rc" != "3" ] || [ "\$n" -ge 40 ]; then
+  crontab -l 2>/dev/null | grep -v 'moviepilot_init_superuser.sh' | crontab - 2>/dev/null
+  rm -f "$WRAP" "$PY_SRC" /tmp/moviepilot_init_try
+fi
+exit 0
+WEOF
+chmod +x "$WRAP" 2>/dev/null
+
+# ---- 5. 先短试一次（10s）：接口已就绪就秒完成，不拖慢安装 ----
 rc=0
 MP_PORT="$PORT" MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" \
+  MP_OLD_PASSWORD="$OLD_PASS" MP_STATE_FILE="$STATE" \
   MP_INIT_LOG="$LOG" MP_INIT_TIMEOUT=10 \
   "$PY_BIN" "$PY_SRC" >/dev/null 2>&1 || rc=$?
 log "首次尝试 rc=$rc"
 [ "$rc" = "0" ] && { log "首次尝试即完成"; exit 0; }
 
-# ---- 5. 未就绪 → detach 到后台继续，立即返回，绝不阻塞安装 ----
+# ---- 6. 未就绪/失败 → 转后台继续，立即返回，绝不阻塞安装 ----
+rm -f /tmp/moviepilot_init_try
+if command -v crontab >/dev/null 2>&1; then
+  ( crontab -l 2>/dev/null | grep -v 'moviepilot_init_superuser.sh'; echo "*/2 * * * * /bin/bash $WRAP" ) | crontab - 2>/dev/null \
+    && { log "已注册 crontab 每 2 分钟重试一次，回调立即返回"; exit 0; }
+  log "crontab 注册失败，退回 setsid"
+fi
 if command -v setsid >/dev/null 2>&1; then
-  setsid env MP_PORT="$PORT" MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" \
-    MP_INIT_LOG="$LOG" MP_INIT_TIMEOUT=900 \
-    "$PY_BIN" "$PY_SRC" >/dev/null 2>&1 </dev/null &
+  setsid /bin/bash "$WRAP" >/dev/null 2>&1 </dev/null &
 else
-  nohup env MP_PORT="$PORT" MP_ADMIN_USER="$USER" MP_ADMIN_PASSWORD="$PASS" \
-    MP_INIT_LOG="$LOG" MP_INIT_TIMEOUT=900 \
-    "$PY_BIN" "$PY_SRC" >/dev/null 2>&1 </dev/null &
+  nohup /bin/bash "$WRAP" >/dev/null 2>&1 </dev/null &
 fi
 disown 2>/dev/null || true
-log "已转入后台继续（最长900s），回调立即返回"
+log "已转入后台继续，回调立即返回"
 
 exit 0
