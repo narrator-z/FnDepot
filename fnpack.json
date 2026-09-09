@@ -17,7 +17,7 @@
   "moviepilot": {
     "display_name": "MoviePilot",
     "platform": "all",
-    "version": "3.0.7",
+    "version": "3.0.8",
     "desc": "NAS媒体库自动化管理工具，基于Jackett和Plex",
     "labels": "媒体,自动化,下载",
     "distributor": "narrator-z",
@@ -25,8 +25,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "22.91KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vmoviepilot-3.0.7/moviepilot_all.fpk",
-    "changelog": "3.0.7 修复安装向导设置的账号密码无效：MoviePilot V3 不再从部署配置初始化超级管理员（密码只存数据库），已移除向导的「管理员用户名/密码」字段与 compose 的 SUPERUSER/SUPERUSER_PASSWORD 环境变量，改为引导在首次打开页面时创建超级管理员；配置向导「重置管理员密码」同步改为说明。3.0.6 修复安装报错「service name (MoviePilot.Application) must be a prefix of moviepilot or equal to moviepilot」：服务名由大写 MoviePilot.Application 改为小写 moviepilot.Application（FnOS 大小写敏感校验，必须以 appname moviepilot 为前缀）。display_name 仍为 MoviePilot。3.0.5 新增安装向导「媒体库目录」步骤：可自定义容器内 /media 的宿主机挂载路径（字段 moviepilot_media_path，默认 ./media 即应用自身存储、升级不丢；可填飞牛共享文件夹绝对路径如 /vol1/1000/影视，需该共享文件夹已授权本应用访问）。3.0.4 修复 FnOS 应用中心报 10300/应用不存在：目录名与 fnpack 键由 MoviePilot(大写) 改为 moviepilot(小写)，与 manifest 的 appname 一致，飞牛才能按 appname 正确定位应用；3.0.0~3.0.2 误改大写 MoviePilot 导致升级卸载旧应用并删除其配置数据目录、造成配置丢失。"
+    "size": "22.52KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vmoviepilot-3.0.8/moviepilot_all.fpk",
+    "changelog": "3.0.8 数据目录统一由 ./moviepilot-v2 改为 ./moviepilot（compose 挂载 ./moviepilot/config、./moviepilot/core）；升级/安装前脚本自动迁移旧目录，仅在新目录不存在时执行，老用户配置不丢。3.0.7 修复安装向导设置的账号密码无效：MoviePilot V3 不再从部署配置初始化超级管理员（密码只存数据库），已移除向导的「管理员用户名/密码」字段与 compose 的 SUPERUSER/SUPERUSER_PASSWORD 环境变量，改为引导在首次打开页面时创建超级管理员；配置向导「重置管理员密码」同步改为说明。3.0.6 修复安装报错「service name (MoviePilot.Application) must be a prefix of moviepilot or equal to moviepilot」：服务名由大写 MoviePilot.Application 改为小写 moviepilot.Application（FnOS 大小写敏感校验，必须以 appname moviepilot 为前缀）。display_name 仍为 MoviePilot。3.0.5 新增安装向导「媒体库目录」步骤：可自定义容器内 /media 的宿主机挂载路径（字段 moviepilot_media_path，默认 ./media 即应用自身存储、升级不丢；可填飞牛共享文件夹绝对路径如 /vol1/1000/影视，需该共享文件夹已授权本应用访问）。3.0.4 修复 FnOS 应用中心报 10300/应用不存在：目录名与 fnpack 键由 MoviePilot(大写) 改为 moviepilot(小写)，与 manifest 的 appname 一致，飞牛才能按 appname 正确定位应用；3.0.0~3.0.2 误改大写 MoviePilot 导致升级卸载旧应用并删除其配置数据目录、造成配置丢失。"
   }
 }

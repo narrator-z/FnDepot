@@ -1,18 +1,46 @@
 #!/bin/bash
-# 升级前：保留配置与数据，并停掉旧版本容器（moviepilot-v2）
-# 原因：从 v2.14.7 升级时容器名由 moviepilot-v2 改为 moviepilot，
-# FnOS 基于新 compose 无法自动停止旧容器，导致 host 模式端口(20669/47901)
-# 被占用、新容器启动失败。此处主动停旧容器以释放端口。
+# 升级前：
+# 1) 停掉旧版本容器（历史容器名 moviepilot-v2，以及当前的 moviepilot），
+#    释放 host 模式端口(20669/47901)，并避免容器占用待迁移的数据目录。
+# 2) 迁移历史数据目录 moviepilot-v2 -> moviepilot（config / core 子目录），兼容 3.0.8 之前的安装。
+#    仅当目标不存在时移动，绝不覆盖新数据。
+
 DOCKER="$(command -v docker 2>/dev/null || true)"
 [ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
 [ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
-OLD=moviepilot-v2
-if [ -n "$DOCKER" ]; then
-  ID="$($DOCKER ps -aq --filter "name=^/${OLD}$" 2>/dev/null)"
-  if [ -n "$ID" ]; then
-    $DOCKER stop "$OLD" >/dev/null 2>&1 || true
-    $DOCKER rm -f "$OLD" >/dev/null 2>&1 || true
-  fi
-fi
-exit 0
 
+MOUNT_SRC=""
+if [ -n "$DOCKER" ]; then
+  MOUNT_SRC="$($DOCKER inspect moviepilot --format '{{range .Mounts}}{{if eq .Destination "/config"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)"
+  for NAME in moviepilot-v2 moviepilot; do
+    ID="$($DOCKER ps -aq --filter "name=^/${NAME}$" 2>/dev/null)"
+    if [ -n "$ID" ]; then
+      $DOCKER stop "$ID" >/dev/null 2>&1 || true
+      $DOCKER rm -f "$ID" >/dev/null 2>&1 || true
+    fi
+  done
+fi
+
+# 候选根目录：优先从原容器的 /config 挂载反推，其次当前目录与常见应用数据目录
+CANDS="$PWD"
+[ -n "$MOUNT_SRC" ] && CANDS="$(dirname "$(dirname "$MOUNT_SRC")") $CANDS"
+CANDS="$CANDS /vol1/@appcenter/moviepilot/docker /vol2/@appcenter/moviepilot/docker /vol3/@appcenter/moviepilot/docker /vol4/@appcenter/moviepilot/docker"
+
+BASE=""
+for C in $CANDS; do
+  [ -d "$C/moviepilot-v2" ] && BASE="$C" && break
+done
+
+if [ -n "$BASE" ]; then
+  mkdir -p "$BASE/moviepilot"
+  for SUB in config core; do
+    OLD="$BASE/moviepilot-v2/$SUB"
+    NEW="$BASE/moviepilot/$SUB"
+    if [ -d "$OLD" ] && [ ! -e "$NEW" ]; then
+      mv "$OLD" "$NEW" 2>/dev/null || true
+    fi
+  done
+  rmdir "$BASE/moviepilot-v2" 2>/dev/null || true
+fi
+
+exit 0

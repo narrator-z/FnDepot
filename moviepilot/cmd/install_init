@@ -1,5 +1,37 @@
 #!/bin/bash
+# 安装前：迁移历史数据目录 moviepilot-v2 -> moviepilot（config / core 子目录）
+# 背景：早期版本把数据放在 ./moviepilot-v2 下，3.0.8 起统一到 ./moviepilot。
+# 安全规则：仅当目标不存在时才移动；已迁移或全新安装时脚本为空操作，绝不覆盖新数据。
 
-### This script is called before the user installs the application.
+DOCKER="$(command -v docker 2>/dev/null || true)"
+[ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
+[ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
+
+# 候选根目录：优先从已有容器的 /config 挂载反推，其次当前目录与常见应用数据目录
+CANDS="$PWD"
+if [ -n "$DOCKER" ]; then
+  SRC="$($DOCKER inspect moviepilot --format '{{range .Mounts}}{{if eq .Destination "/config"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)"
+  if [ -n "$SRC" ]; then
+    CANDS="$(dirname "$(dirname "$SRC")") $CANDS"
+  fi
+fi
+CANDS="$CANDS /vol1/@appcenter/moviepilot/docker /vol2/@appcenter/moviepilot/docker /vol3/@appcenter/moviepilot/docker /vol4/@appcenter/moviepilot/docker"
+
+BASE=""
+for C in $CANDS; do
+  [ -d "$C/moviepilot-v2" ] && BASE="$C" && break
+done
+
+if [ -n "$BASE" ]; then
+  mkdir -p "$BASE/moviepilot"
+  for SUB in config core; do
+    OLD="$BASE/moviepilot-v2/$SUB"
+    NEW="$BASE/moviepilot/$SUB"
+    if [ -d "$OLD" ] && [ ! -e "$NEW" ]; then
+      mv "$OLD" "$NEW" 2>/dev/null || true
+    fi
+  done
+  rmdir "$BASE/moviepilot-v2" 2>/dev/null || true
+fi
 
 exit 0
