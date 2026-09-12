@@ -25,7 +25,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.6.6';
+const VERSION = '1.6.7';
 const APP_NAME = 'chat2api';
 
 // 支持逗号分隔的多个 socket 路径。
