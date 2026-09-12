@@ -208,6 +208,9 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
+    // 绝对 base：index.html 里的静态资源用 /app/chat2api/assets/xxx 绝对路径，
+    // 避免相对路径 ./assets/ 在无尾斜杠 URL（/app/chat2api）下被解析到 /app/assets/。
+    base: '/app/chat2api/',
     build: {
       rollupOptions: {
         input: {

@@ -11,7 +11,7 @@ main                  = cmd/main
 platform              = all
 micro_app             = true
 os_min_version        = 1.0.0
-version               = 1.6.9
+version               = 1.6.10
 install_type          = 系统空间
 ctl_stop              = true
 service_port          = 26800
@@ -20,4 +20,4 @@ disable_authorization_path = false
 desktop_uidir         = ui
 desktop_applaunchname = chat2api.Application
 install_dep_apps      = nodejs_v22
-changelog             = 修复 1.6.8 安装后管理界面白屏的问题：electron-vite 的 main 构建把 electron 当作 external，构建产物 core/raw/fnos-entry.js 里保留了裸 require("electron")，而 fpk 内没有 electron 包（构建时跳过二进制下载并被 npm prune 清掉），导致 require 抛 Cannot find module 'electron'；该异常又被 adapter.js 的 locateEntry() 静默吞掉，误报「未找到主进程产物」，于是 /api/ipc 全部返回 core_not_ready，前端拿不到任何数据、页面空白。现随包附带一个纯 Node 的 electron 替身包（node_modules/electron，由 build-inner.sh 在 npm prune 之后落位），并让 locateEntry() 在 require 失败时抛出真实原因而不再静默吞异常。
+changelog             = 修复 1.6.9 安装后管理界面仍白屏的问题：app/ui/config 的入口 url 是 /app/chat2api（无尾斜杠），而 index.html 里的静态资源是相对路径 ./assets/xxx.js，无尾斜杠下浏览器把它们解析到 /app/assets/xxx.js（少一层），服务端对该路径 fallback 返回 index.html，浏览器把 HTML 当 JS 执行失败 → 白屏。现双重修复：① server-entry.js 对无尾斜杠的网关前缀 302 重定向到带尾斜杠；② build-inner.sh 的 renderer 配置加 base=/app/chat2api/，静态资源改为绝对路径。另附 1.6.8 白屏修复：electron-vite 把 electron 当 external 导致产物保留裸 require("electron")，而 fpk 内无 electron 包（构建跳过二进制下载且被 npm prune 清掉），require 抛 Cannot find module 'electron'，又被 adapter.js 的 locateEntry() 静默吞掉、误报「未找到主进程产物」，于是 /api/ipc 全返 core_not_ready。现已随包附带纯 Node 的 electron 替身包（node_modules/electron），并让 locateEntry() 抛真实原因。

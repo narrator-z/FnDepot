@@ -25,7 +25,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.6.7';
+const VERSION = '1.6.10';
 const APP_NAME = 'chat2api';
 
 // 支持逗号分隔的多个 socket 路径。
@@ -180,7 +180,18 @@ function parsePath(req) {
 
 // ---------- 管理界面（Unix Socket）----------
 function mgmtHandler(req, res) {
-  const pathname = stripPrefix(parsePath(req));
+  const rawPathname = parsePath(req);
+
+  // 无尾斜杠的网关前缀重定向到带尾斜杠：index.html 里的静态资源是相对路径
+  // （./assets/xxx.js），在无尾斜杠 URL（/app/chat2api）下浏览器会把它们解析到
+  // /app/assets/xxx.js（少了一层），服务端对 /app/assets/* 会 fallback 返回 index.html，
+  // 浏览器把 HTML 当 JS 执行失败 → 前端白屏。统一 302 到带尾斜杠即可规避。
+  if (rawPathname === GATEWAY_PREFIX) {
+    res.writeHead(302, { 'Location': GATEWAY_PREFIX + '/' });
+    return res.end();
+  }
+
+  const pathname = stripPrefix(rawPathname);
   const user = getGatewayUser(req);
 
   // 状态接口：前端与运维都用它做健康检查
