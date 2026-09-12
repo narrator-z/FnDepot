@@ -8,3 +8,7 @@
 *.sh text eol=lf
 */cmd/* text eol=lf
 */manifest text eol=lf
+
+# 服务端 JS 在 Linux 上由 node 执行，统一 LF。
+# 带 shebang 的入口文件若被转成 CRLF，直接执行时内核会去找 "node\r" 解释器而失败。
+chat2api/app/server/*.js text eol=lf
