@@ -70,6 +70,14 @@ jobs:
           RELEASES=()
 
           for APP in $APPS; do
+  # chat2api 的核心（core/ + node_modules/，含 canvas 等原生模块）由 build-chat2api.yml
+  # 在 node:22-bookworm 中构建并产出 Artifact；仓库仅含骨架，本工作流从仓库出包会得到缺核心的残包。
+  # 故 chat2api 的 fpk 由 build-chat2api.yml(pack_fpk) 或手动发布，本工作流跳过。
+  if [[ "$APP" == "chat2api" ]]; then
+    echo "::notice::chat2api 由 build-chat2api.yml 负责出包，本工作流跳过"
+    continue
+  fi
+
             PREV=$(git show "$BEFORE:fnpack.json" 2>/dev/null | jq -r --arg a "$APP" '.[$a].version // empty' || true)
             CUR=$(jq -r --arg a "$APP" '.[$a].version // empty' fnpack.json)
 
