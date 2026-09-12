@@ -17,9 +17,11 @@
 FROM node:22-bookworm-slim
 
 # 原生模块编译所需工具链，以及 git（clone 源码）。
-# cairo/pango/jpeg/gif/rsvg 是 canvas 的编译依赖 —— 缺少它们时 canvas 的预编译包
-# 若与当前环境不匹配就会回退源码编译并直接失败（.github/workflows/build-chat2api.yml
-# 里装的也是这一组，两处必须一致）。
+# cairo/pango/jpeg/gif/rsvg 是 canvas 的编译依赖。
+# 注意：经核对，WXS 源码实际并未真正引用 canvas（仅 tray 里一个 Buffer 变量名），
+# 保留这组系统库仅为防御性 —— 万一将来引入真实原生模块、或 canvas 的某个传递依赖
+# 回退源码编译时，工具链已就绪不会直接失败。装上没有坏处。
+# （与 .github/workflows/build-chat2api.yml 里安装的同一组，两处必须一致。）
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \

@@ -62,12 +62,15 @@ docker build -t "$IMAGE" -f "$SCRIPT_DIR/Dockerfile" "$ROOT"
 # ---------- 4. 执行构建 ----------
 echo "---- 容器内构建（首次耗时较长，需下载依赖）----"
 mkdir -p "$OUT"
+SHIM_SRC="$SCRIPT_DIR/shim"
 docker run --rm \
     -e SRC_DIR=/src \
     -e OUT_DIR=/out \
+    -e SHIM_DIR=/shim \
     -v "$(towin "$SRC")":/src \
     -v "$(towin "$OUT")":/out \
     -v "$(towin "$SCRIPT_DIR/build-inner.sh")":/usr/local/bin/build-inner.sh:ro \
+    -v "$(towin "$SHIM_SRC")":/shim:ro \
     "$IMAGE"
 
 # ---------- 5. 校验产物 ----------

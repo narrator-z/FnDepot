@@ -110,16 +110,19 @@
   <div id="note" class="note" style="display:none">
     <strong>当前为骨架验证包</strong>，Chat2API 业务逻辑尚未接入。
     本页可正常打开，证明「统一网关 → Unix Socket → 服务端」整条通路已打通。
-    接入真实逻辑请执行仓库中的 <code>build/build-server.sh</code>。
+    接入真实逻辑请执行仓库中的 <code>build/build-server.sh</code>（或触发
+    <code>.github/workflows/build-chat2api.yml</code>）。
   </div>
 
   <div class="card">
     <h2>接入步骤</h2>
     <ol class="steps">
       <li>验证通路：本页面可打开，即网关与生命周期脚本工作正常</li>
-      <li>构建核心：执行 <code>build/build-server.sh</code>，在 <code>node:22-slim</code> 中构建 Chat2API-WXS</li>
+      <li>构建核心：执行 <code>build/build-server.sh</code>，在 <code>node:22-bookworm-slim</code>
+          （Debian 12，与飞牛同源）中构建 Chat2API-WXS；<b>禁止 Alpine</b>、禁止 Windows 构建</li>
       <li>产物落位：编译结果输出到 <code>app/server/core/</code>，服务端自动接管</li>
-      <li>重新打包：执行 <code>_build_fpk.py</code> 生成 <code>chat2api.fpk</code></li>
+      <li>重新打包：执行 <code>bash scripts/build_fpk.sh chat2api chat2api all</code>
+          生成 <code>chat2api/chat2api_all.fpk</code>，再 bump <code>fnpack.json</code> 版本号推送即自动发布</li>
     </ol>
   </div>
 </div>

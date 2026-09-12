@@ -11,12 +11,17 @@ name: Build Chat2API Core
 #   与飞牛同源，glibc 完全一致 —— 这是唯一能规避该风险的方式。
 #
 # 职责边界：
-#   本工作流只负责「构建 WXS 核心 + 打包 fpk」，产物以 Artifact 提供（不建 Release、
-#   不写回仓库，避免与 publish.yml 抢同一个 tag）。
-#   骨架包（不含核心）的自动发布由既有的 publish.yml 负责 —— fnpack.json 里
-#   chat2api 的版本一变更，它就会自动打包并发 Release。
+#   本工作流跑完整构建，把「可直接打包进 fpk 的产物」整体作为 Artifact 上传
+#   （chat2api/app/server/ 下的 public/、core/、node_modules/），不建 Release、
+#   不写回仓库，避免与 publish.yml 抢同一个 tag。
+#   骨架包（不含核心）的自动发布由既有的 publish.yml 负责。
 
 on:
+  push:
+    paths:
+      - 'chat2api/build/**'
+      - 'chat2api/app/**'
+      - '.github/workflows/build-chat2api.yml'
   workflow_dispatch:
     inputs:
       core_ref:
@@ -25,10 +30,10 @@ on:
         required: false
         default: 'main'
       pack_fpk:
-        description: '同时打包为 fpk'
+        description: '同时打包为 fpk 并上传（产物 Artifact 始终上传）'
         type: boolean
         required: false
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -43,7 +48,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            build-essential python3 pkg-config git ca-certificates jq gzip tar \
+            build-essential python3 make g++ pkg-config git ca-certificates jq gzip tar \
             libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
           rm -rf /var/lib/apt/lists/*
           # 容器内 checkout 常因目录属主不同被 git 拒绝
@@ -52,46 +57,58 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 构建 Chat2API-WXS 核心
+      - name: 构建 Chat2API-WXS 核心产物
         env:
-          SRC_DIR: /tmp/wxs
-          OUT_DIR: ${{ github.workspace }}/chat2api/app/server
           # 经 env 传参而非直接内联 ${{ }}，避免用户输入被当作 shell 执行
-          CORE_REF: ${{ inputs.core_ref }}
+          CORE_REF: ${{ inputs.core_ref || 'main' }}
           # 不下载 Electron 二进制：fnOS 上不启动 GUI，几百 MB 纯属浪费
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
           CYPRESS_INSTALL_BINARY: '0'
+          # build/build-inner.sh 需要 shim 目录（electron-node.ts / electron-updater-stub.js /
+          # fnos-entry.ts / inject-renderer.sh / adapter.js），统一指到仓库内位置
+          SHIM_DIR: ${{ github.workspace }}/chat2api/build/shim
+          SRC_DIR: /tmp/wxs
+          OUT_DIR: ${{ github.workspace }}/chat2api/app/server
         run: |
           set -euo pipefail
+          echo "== 克隆 WXS 源码 ($CORE_REF) =="
           git clone --depth 1 --branch "$CORE_REF" \
             https://github.com/narrator-z/Chat2API-WXS.git "$SRC_DIR"
-          SRC_DIR="$SRC_DIR" OUT_DIR="$OUT_DIR" bash chat2api/build/build-inner.sh
+          echo "== 运行构建（关键日志见下，完整日志存 /tmp/build.log）=="
+          SHIM_DIR="$SHIM_DIR" SRC_DIR="$SRC_DIR" OUT_DIR="$OUT_DIR" \
+            bash chat2api/build/build-inner.sh 2>&1 | tee /tmp/build.log
+          echo "== 构建产物概览 =="
+          du -sh "$OUT_DIR/public" "$OUT_DIR/core" "$OUT_DIR/node_modules" 2>/dev/null || true
+          echo "--- core/raw 内容 ---"
+          ls -1 "$OUT_DIR/core/raw" 2>/dev/null || true
+
+      - name: 构建失败诊断
+        if: failure()
+        run: |
+          echo "==== 关键构建日志（/tmp/build.log 尾部 60 行）===="
+          tail -n 60 /tmp/build.log 2>/dev/null || echo "（无日志）"
+          echo "==== 环境 ===="
+          node -v; npm -v; uname -a
+
+      - name: 上传可直接打包的产物（Artifact）
+        if: ${{ !failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat2api-server
+          path: chat2api/app/server/
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: 打包 fpk
-        if: ${{ inputs.pack_fpk }}
+        if: ${{ inputs.pack_fpk && !failure() }}
         run: bash scripts/build_fpk.sh chat2api chat2api all
 
-      - name: 输出包信息
-        if: ${{ inputs.pack_fpk }}
-        run: |
-          FPK=chat2api/chat2api_all.fpk
-          echo "size: $(stat -c%s "$FPK") bytes"
-          echo "--- fpk 内容 ---"
-          tar -tzf "$FPK" | sort
-
       - name: 上传 fpk
-        if: ${{ inputs.pack_fpk }}
+        if: ${{ inputs.pack_fpk && !failure() }}
         uses: actions/upload-artifact@v4
         with:
           name: chat2api_all.fpk
           path: chat2api/chat2api_all.fpk
-          retention-days: 30
-
-      - name: 上传核心产物
-        if: ${{ !inputs.pack_fpk }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: chat2api-core
-          path: chat2api/app/server/
-          retention-days: 30
+          retention-days: 7
+          if-no-files-found: error
