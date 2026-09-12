@@ -1,13 +1,13 @@
 name: Auto Update Chat2API
 
-# 自动同步上游 Chat2API-WXS 的 main 分支更新：
+# 自动同步上游 Chat2API-WXS 的 tag 更新：
 #   1. 定时（每天 UTC 06:00 / 北京时间 14:00）或手动触发
-#   2. 查上游 main HEAD SHA，与 chat2api/build/.upstream-sha 比对
-#   3. 有更新时：克隆上游 → 构建核心 → 验证产物 → 打包 fpk → 发布 Release → bump 版本 → 提交
-#   4. 失败时不发布、不更新 SHA（下次仍用旧版本重试）
+#   2. 查上游最新 tag，与 chat2api/build/.upstream-ref 比对
+#   3. 有新 tag 时：克隆该 tag → 构建核心 → 验证产物 → 打包 fpk → 发布 Release → bump 版本 → 提交
+#   4. 失败时不发布、不更新 ref（下次仍用旧 tag 重试）
 #
 # 保留自定义改动：本地 shim/、build-inner.sh、manifest 等不在上游仓库内，天然隔离。
-# 回滚：GitHub Release 保留所有历史版本；旧 .upstream-sha 不被新失败覆盖。
+# 回滚：GitHub Release 保留所有历史版本；旧 .upstream-ref 不被新失败覆盖。
 
 on:
   schedule:
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: '强制更新（跳过 SHA 比对，即使上游无变化也重新构建发布）'
+        description: '强制更新（跳过 tag 比对，即使无变化也重新构建发布）'
         type: boolean
         required: false
         default: false
@@ -50,18 +50,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          UPSTREAM_SHA=$(curl -sf -H "Authorization: token $GITHUB_TOKEN" \
+          UPSTREAM_TAG=$(curl -sf -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/narrator-z/Chat2API-WXS/commits/main" | jq -r '.sha')
-          LOCAL_SHA=$(tr -d '[:space:]' < chat2api/build/.upstream-sha 2>/dev/null || echo "")
-          echo "upstream_sha=$UPSTREAM_SHA" >> $GITHUB_OUTPUT
-          echo "local_sha=${LOCAL_SHA:-uninitialized}" >> $GITHUB_OUTPUT
-          if [ "${{ inputs.force }}" = "true" ] || [ "$UPSTREAM_SHA" != "$LOCAL_SHA" ]; then
+            "https://api.github.com/repos/narrator-z/Chat2API-WXS/tags?per_page=1" | jq -r '.[0].name // empty')
+          LOCAL_TAG=$(tr -d '[:space:]' < chat2api/build/.upstream-ref 2>/dev/null || echo "")
+          echo "upstream_tag=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
+          echo "local_tag=${LOCAL_TAG:-uninitialized}" >> $GITHUB_OUTPUT
+          if [ "${{ inputs.force }}" = "true" ] || [ "$UPSTREAM_TAG" != "$LOCAL_TAG" ]; then
             echo "needs_update=true" >> $GITHUB_OUTPUT
-            echo "::notice::上游有更新: $LOCAL_SHA → $UPSTREAM_SHA"
+            echo "::notice::上游有新 tag: $LOCAL_TAG → $UPSTREAM_TAG"
           else
             echo "needs_update=false" >> $GITHUB_OUTPUT
-            echo "::notice::上游无更新 ($UPSTREAM_SHA)"
+            echo "::notice::上游无新 tag ($UPSTREAM_TAG)"
           fi
 
       - name: 构建 Chat2API-WXS 核心
@@ -73,10 +73,12 @@ jobs:
           SHIM_DIR: ${{ github.workspace }}/chat2api/build/shim
           SRC_DIR: /tmp/wxs
           OUT_DIR: ${{ github.workspace }}/chat2api/app/server
+          UPSTREAM_TAG: ${{ steps.check.outputs.upstream_tag }}
         run: |
           set -eu
-          echo "== 克隆上游 Chat2API-WXS (main) =="
-          git clone --depth 1 https://github.com/narrator-z/Chat2API-WXS.git "$SRC_DIR"
+          echo "== 克隆上游 Chat2API-WXS ($UPSTREAM_TAG) =="
+          git clone --depth 1 --branch "$UPSTREAM_TAG" \
+            https://github.com/narrator-z/Chat2API-WXS.git "$SRC_DIR"
           echo "== 运行 build-inner.sh =="
           SHIM_DIR="$SHIM_DIR" SRC_DIR="$SRC_DIR" OUT_DIR="$OUT_DIR" \
             bash chat2api/build/build-inner.sh > /tmp/build.log 2>&1
@@ -148,20 +150,20 @@ jobs:
         run: |
           NEW="${{ steps.version.outputs.new_version }}"
           TAG="vchat2api-$NEW"
-          UPSTREAM_SHA="${{ steps.check.outputs.upstream_sha }}"
+          UPSTREAM_TAG="${{ steps.check.outputs.upstream_tag }}"
           CHANGELOG=$(jq -r '.chat2api.changelog // ""' fnpack.json)
           gh release create "$TAG" "chat2api/chat2api_all.fpk" \
             --title "Chat2API $NEW" \
-            --notes "自动同步上游 Chat2API-WXS main@${UPSTREAM_SHA:0:12}。${CHANGELOG:+
+            --notes "自动同步上游 Chat2API-WXS $UPSTREAM_TAG。${CHANGELOG:+
 
           $CHANGELOG}"
 
-      - name: 更新版本号、size、download_url、上游 SHA、更新日志
+      - name: 更新版本号、size、download_url、上游 tag、更新日志
         if: steps.check.outputs.needs_update == 'true'
         run: |
           NEW="${{ steps.version.outputs.new_version }}"
           TAG="vchat2api-$NEW"
-          UPSTREAM_SHA="${{ steps.check.outputs.upstream_sha }}"
+          UPSTREAM_TAG="${{ steps.check.outputs.upstream_tag }}"
           # bump manifest version
           sed -i "s/^version\s*=.*/version               = $NEW/" chat2api/manifest
           # fpk size + download_url
@@ -171,10 +173,10 @@ jobs:
           jq --arg v "$NEW" --arg s "$SIZE_FMT" --arg u "$REL_URL" \
             '.chat2api.version=$v | .chat2api.size=$s | .chat2api.download_url=$u' \
             fnpack.json > fnpack.tmp && mv fnpack.tmp fnpack.json
-          # 更新上游 SHA（验证通过后才写，失败时不写 → 下次仍用旧 SHA 重试）
-          echo "$UPSTREAM_SHA" > chat2api/build/.upstream-sha
+          # 更新上游 tag（验证通过后才写，失败时不写 → 下次仍用旧 tag 重试）
+          echo "$UPSTREAM_TAG" > chat2api/build/.upstream-ref
           # 更新日志
-          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) upstream=${UPSTREAM_SHA:0:12} version=$NEW status=success" \
+          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) upstream=$UPSTREAM_TAG version=$NEW status=success" \
             >> chat2api/build/.upstream-changelog
 
       - name: 提交变更
@@ -182,14 +184,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add chat2api/build/.upstream-sha chat2api/build/.upstream-changelog chat2api/manifest fnpack.json
-          git commit -m "chore(chat2api): 自动同步上游 ${{ steps.check.outputs.upstream_sha }} → ${{ steps.version.outputs.new_version }} [skip ci]"
+          git add chat2api/build/.upstream-ref chat2api/build/.upstream-changelog chat2api/manifest fnpack.json
+          git commit -m "chore(chat2api): 自动同步上游 ${{ steps.check.outputs.upstream_tag }} → ${{ steps.version.outputs.new_version }} [skip ci]"
           git push
 
-      - name: 记录失败（不更新 SHA）
+      - name: 记录失败（不更新 tag）
         if: failure() && steps.check.outputs.needs_update == 'true'
         run: |
-          UPSTREAM_SHA="${{ steps.check.outputs.upstream_sha }}"
-          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) upstream=${UPSTREAM_SHA:0:12} version=N/A status=failed" \
+          UPSTREAM_TAG="${{ steps.check.outputs.upstream_tag }}"
+          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) upstream=$UPSTREAM_TAG version=N/A status=failed" \
             >> chat2api/build/.upstream-changelog
-          echo "::warning::更新失败，SHA 未更新（$UPSTREAM_SHA），下次仍会重试"
+          echo "::warning::更新失败，tag 未更新（$UPSTREAM_TAG），下次仍会重试"
