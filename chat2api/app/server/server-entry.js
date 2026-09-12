@@ -5,7 +5,8 @@
  * Chat2API fnOS 服务端入口
  *
  * 同时提供两个监听器：
- *   1) Unix Socket（SOCKET_PATH）—— 管理界面，由飞牛统一网关挂到 /app/chat2api。
+ *   1) Unix Socket（SOCKET_PATH，逗号分隔可多个）—— 管理界面，由飞牛统一网关
+ *      挂到 /app/chat2api。
  *      网关已代为校验 NAS 登录态，并转发 X-Trim-Userid / X-Trim-Isadmin / X-Trim-Username。
  *      不占 TCP 端口，从根本上避开端口冲突。
  *   2) TCP（API_PORT，默认 26800）—— OpenAI 兼容 API 代理，供 Cline / Cherry Studio
@@ -24,10 +25,18 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.6.5';
+const VERSION = '1.6.6';
 const APP_NAME = 'chat2api';
 
-const SOCKET_PATH = process.env.SOCKET_PATH || path.join(process.cwd(), 'app.sock');
+// 支持逗号分隔的多个 socket 路径。
+// 官方文档要求 gatewaySocket 放已安装应用的 target/ 目录下，但本机实测
+// frpc / Harness / fndepot 等已装应用的 socket 都在应用根目录，
+// 且 frpc / Harness 压根没有 target/ 目录。规范与既有实现存在差异，
+// 因此两个位置都监听，避免赌错一边导致网关 502。
+const SOCKET_PATHS = (process.env.SOCKET_PATH || path.join(process.cwd(), 'app.sock'))
+  .split(',')
+  .map(function (s) { return s.trim(); })
+  .filter(Boolean);
 const API_PORT = Number.parseInt(process.env.API_PORT || '26800', 10);
 const API_HOST = process.env.API_HOST || '0.0.0.0';
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, 'public');
@@ -182,7 +191,7 @@ function mgmtHandler(req, res) {
       version: VERSION,
       coreReady: !!core,
       transport: 'unix-socket',
-      socket: SOCKET_PATH,
+      sockets: SOCKET_PATHS,
       gatewayPrefix: GATEWAY_PREFIX,
       apiPort: API_PORT,
       adminKeyEnabled: !!ADMIN_KEY,
@@ -261,11 +270,13 @@ function apiHandler(req, res) {
 
 // ---------- 启动 ----------
 function cleanupAndExit(code) {
-  try {
-    if (fs.existsSync(SOCKET_PATH)) fs.unlinkSync(SOCKET_PATH);
-  } catch (e) {
-    /* ignore */
-  }
+  SOCKET_PATHS.forEach(function (p) {
+    try {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    } catch (e) {
+      /* ignore */
+    }
+  });
   process.exit(code);
 }
 
@@ -276,25 +287,34 @@ function bootstrap() {
     log('WARN: 无法创建数据目录 ' + DATA_DIR + ': ' + e.message);
   }
 
-  // 1) 管理界面：Unix Socket
-  try {
-    if (fs.existsSync(SOCKET_PATH)) fs.unlinkSync(SOCKET_PATH);
-  } catch (e) {
-    log('WARN: 清理旧 socket 失败: ' + e.message);
-  }
-
-  const mgmtServer = http.createServer(mgmtHandler);
-  mgmtServer.on('error', (err) => {
-    log('ERROR: 管理界面服务异常: ' + err.message);
-  });
-  mgmtServer.listen(SOCKET_PATH, () => {
-    // 网关进程通常以别的用户运行，放宽权限确保可访问
+  // 1) 管理界面：Unix Socket（可能多个位置，见 SOCKET_PATHS 说明）
+  const mgmtServers = [];
+  SOCKET_PATHS.forEach(function (sockPath) {
     try {
-      fs.chmodSync(SOCKET_PATH, 0o666);
+      fs.mkdirSync(path.dirname(sockPath), { recursive: true });
     } catch (e) {
-      log('WARN: chmod socket 失败: ' + e.message);
+      /* 目录已存在或无权创建，交由 listen 的 error 处理 */
     }
-    log('管理界面已监听 Unix Socket: ' + SOCKET_PATH + '（网关路径 ' + GATEWAY_PREFIX + '）');
+    try {
+      if (fs.existsSync(sockPath)) fs.unlinkSync(sockPath);
+    } catch (e) {
+      log('WARN: 清理旧 socket 失败 ' + sockPath + ': ' + e.message);
+    }
+
+    const srv = http.createServer(mgmtHandler);
+    srv.on('error', (err) => {
+      log('ERROR: 管理界面服务异常 (' + sockPath + '): ' + err.message);
+    });
+    srv.listen(sockPath, () => {
+      // 网关进程通常以别的用户运行，放宽权限确保可访问
+      try {
+        fs.chmodSync(sockPath, 0o666);
+      } catch (e) {
+        log('WARN: chmod socket 失败: ' + e.message);
+      }
+      log('管理界面已监听 Unix Socket: ' + sockPath + '（网关路径 ' + GATEWAY_PREFIX + '）');
+    });
+    mgmtServers.push(srv);
   });
 
   // 2) API 代理：TCP
@@ -313,7 +333,7 @@ function bootstrap() {
 
   const shutdown = () => {
     log('收到退出信号，正在关闭...');
-    mgmtServer.close();
+    mgmtServers.forEach(function (s) { s.close(); });
     apiServer.close();
     setTimeout(() => cleanupAndExit(0), 300).unref();
   };

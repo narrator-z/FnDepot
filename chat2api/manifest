@@ -11,7 +11,7 @@ main                  = cmd/main
 platform              = all
 micro_app             = true
 os_min_version        = 1.0.0
-version               = 1.6.5
+version               = 1.6.6
 install_type          = 系统空间
 ctl_stop              = true
 service_port          = 26800
@@ -20,4 +20,4 @@ disable_authorization_path = false
 desktop_uidir         = ui
 desktop_applaunchname = chat2api.Application
 install_dep_apps      = nodejs_v22
-changelog             = 基于 Chat2API-WXS v1.6.5 重新构建：新增 OAuth 登录、上下文管理、工具调用、模型映射与自定义供应商支持。管理界面改用飞牛统一网关 /app/chat2api（监听 Unix Socket，复用 NAS 登录态，不占 TCP 端口），OpenAI API 代理端口改为 26800 以避开 8080-8099 等常规端口拥挤区间。改用飞牛官方 Node.js 22 运行时（install_dep_apps=nodejs_v22），不再自建 systemd 服务，进程由 fnOS 框架经 cmd/main 管理。
+changelog             = 修复 1.6.5 安装后打开提示 bad gateway 的问题：cmd/main 用 [ -d "$cand/app/server" ] 判定应用目录，但飞牛解包 app.tgz 后内容铺在应用根目录（server/、ui/），并无 app/ 这一层，导致 TRIM_APPDEST 被全部否掉、回退到不存在路径，server-entry.js 找不到而进程起不来。现改为布局自适应，并同时监听 target/app.sock 与应用根 app.sock（官方文档要求前者，实测本机已装应用都在后者）。

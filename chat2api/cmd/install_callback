@@ -16,15 +16,23 @@ log() { echo "[$(date '+%F %T')] $*"; echo "[$(date '+%F %T')] $*" >>"$LOG" 2>/d
 log "==== install_callback 开始 ===="
 
 # ---------- 1. 目录定位 ----------
+# ⚠️ 不要用 [ -d "$cand/app/server" ] 做存在性校验：app.tgz 解包后内容铺在应用根目录
+# （server/、ui/），没有 app/ 这一层，那样会把 TRIM_APPDEST 全部否掉。
 APP_DIR=""
 for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
-    [ -n "$cand" ] && [ -d "$cand/app/server" ] && { APP_DIR="$cand"; break; }
+    [ -n "$cand" ] && [ -d "$cand" ] && { APP_DIR="$cand"; break; }
 done
 [ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
 log "APP_DIR=$APP_DIR"
 
-SERVER_DIR="$APP_DIR/app/server"
+# 布局自适应：安装后是 $APP_DIR/server，源码仓库是 $APP_DIR/app/server
+if [ -f "$APP_DIR/server/server-entry.js" ]; then
+    SERVER_DIR="$APP_DIR/server"
+else
+    SERVER_DIR="$APP_DIR/app/server"
+fi
 RUNTIME_DIR="$APP_DIR/target"
+log "SERVER_DIR=$SERVER_DIR"
 
 # ---------- 2. Node.js 运行时校验 ----------
 export PATH="/var/apps/nodejs_v22/target/bin:$PATH"

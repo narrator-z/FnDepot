@@ -1,5 +1,6 @@
 #!/bin/bash
 # 升级前：停旧服务，清掉旧 socket，避免新版启动时地址被占
 [ -x "${TRIM_APPDEST:-/var/apps/chat2api}/cmd/main" ] && "${TRIM_APPDEST:-/var/apps/chat2api}/cmd/main" stop >/dev/null 2>&1
-rm -f "${TRIM_APPDEST:-/var/apps/chat2api}/target/app.sock" 2>/dev/null
+rm -f "${TRIM_APPDEST:-/var/apps/chat2api}/target/app.sock" \
+      "${TRIM_APPDEST:-/var/apps/chat2api}/app.sock" 2>/dev/null
 exit 0

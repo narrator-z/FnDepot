@@ -4,8 +4,11 @@
 #
 # 设计要点：
 #   1) Node.js 用飞牛官方运行时 nodejs_v22（manifest 里 install_dep_apps 声明），不自己装。
-#   2) 管理界面监听 Unix Socket（${TRIM_APPDEST}/target/app.sock），由飞牛统一网关
-#      挂到 /app/chat2api —— 不占 TCP 端口，天然无端口冲突。
+#   2) 管理界面监听 Unix Socket，由飞牛统一网关挂到 /app/chat2api
+#      —— 不占 TCP 端口，天然无端口冲突。
+#      同时监听 ${TRIM_APPDEST}/target/app.sock 与 ${TRIM_APPDEST}/app.sock：
+#      官方文档要求 target/ 下，但本机已装应用（frpc/Harness/fndepot）都放应用根目录，
+#      两个位置都监听以免赌错。
 #   3) OpenAI API 代理监听 TCP 26800（外部客户端必须走 IP+端口，无法走需登录的网关）。
 #      端口取 fnOS 注入的 TRIM_SERVICE_PORT，回退 manifest 的 service_port。
 #   4) 进程由 fnOS 框架经本脚本管理，不自建 systemd。
@@ -17,20 +20,39 @@ NODE_BIN_DIR="/var/apps/nodejs_v22/target/bin"
 export PATH="$NODE_BIN_DIR:$PATH"
 
 # ---------- 目录定位 ----------
-# TRIM_APPDEST 由 fnOS 注入（通常 /var/apps/chat2api），兼容旧式安装路径
+# TRIM_APPDEST 由 fnOS 注入（实测为 /vol3/@appcenter/chat2api），优先使用；
+# 其余仅为兼容旧式安装路径的兜底。
+#
+# ⚠️ 不要用 [ -d "$cand/app/server" ] 之类的子目录做存在性校验。
+# 飞牛安装时把 app.tgz 解包到应用根目录，内容是 server/ 与 ui/，
+# 并【没有 app/ 这一层】（源码仓库里才有 app/server）。
+# 早期版本正是因此把 TRIM_APPDEST 全部否掉、回退到不存在的 /var/apps/chat2api，
+# 导致 server-entry.js 找不到、进程起不来、网关返回 bad gateway。
 APP_DIR=""
 for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
-    [ -n "$cand" ] && [ -d "$cand/app/server" ] && { APP_DIR="$cand"; break; }
+    [ -n "$cand" ] && [ -d "$cand" ] && { APP_DIR="$cand"; break; }
 done
 [ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
 
-SERVER_JS="$APP_DIR/app/server/server-entry.js"
+# 服务端根目录布局自适应：
+#   安装后（app.tgz 解包）→ $APP_DIR/server
+#   源码仓库            → $APP_DIR/app/server
+if [ -f "$APP_DIR/server/server-entry.js" ]; then
+    SERVER_ROOT="$APP_DIR/server"
+else
+    SERVER_ROOT="$APP_DIR/app/server"
+fi
+
+SERVER_JS="$SERVER_ROOT/server-entry.js"
 RUNTIME_DIR="$APP_DIR/target"
-SOCKET_PATH="$RUNTIME_DIR/app.sock"
+# socket 位置：官方文档要求放 target/ 下，但本机实测 frpc / Harness / fndepot
+# 等已装应用的 socket 都在应用根目录，且 frpc / Harness 压根没有 target/。
+# 规范与实现存在差异，故两个位置都监听，避免赌错一边。
+SOCKET_PATH="$RUNTIME_DIR/app.sock,$APP_DIR/app.sock"
 PID_FILE="$RUNTIME_DIR/chat2api.pid"
 LOG_DIR="$RUNTIME_DIR/logs"
 LOG_FILE="$LOG_DIR/server.log"
-STATIC_DIR="$APP_DIR/app/server/public"
+STATIC_DIR="$SERVER_ROOT/public"
 
 # ---------- 数据目录 ----------
 if [ -n "${CHAT2API_DATA_DIR:-}" ]; then
@@ -65,6 +87,26 @@ log() {
     return 0
 }
 
+# SOCKET_PATH 可能是逗号分隔的多个路径，统一按列表处理
+socket_list() {
+    echo "$SOCKET_PATH" | tr ',' ' '
+}
+
+remove_sockets() {
+    for s in $(socket_list); do
+        rm -f "$s" 2>/dev/null
+    done
+    return 0
+}
+
+# 任意一个 socket 就绪即认为服务可用
+socket_ready() {
+    for s in $(socket_list); do
+        [ -S "$s" ] && return 0
+    done
+    return 1
+}
+
 is_running() {
     [ -f "$PID_FILE" ] || return 1
     pid="$(cat "$PID_FILE" 2>/dev/null)"
@@ -89,7 +131,9 @@ do_start() {
     fi
 
     # 清理上次残留的 socket，否则新版启动会 EADDRINUSE
-    rm -f "$SOCKET_PATH" 2>/dev/null
+    # 注意 SOCKET_PATH 是逗号分隔的多路径，必须逐个删，rm -f "$SOCKET_PATH" 会把整串
+    # 当成一个文件名（含逗号），实际一个都删不掉。
+    remove_sockets
 
     export NODE_ENV=production
     export API_PORT
@@ -98,7 +142,7 @@ do_start() {
     export STATIC_DIR
     export CHAT2API_DATA_DIR="$DATA_DIR"
 
-    cd "$APP_DIR/app/server" || return 1
+    cd "$SERVER_ROOT" || { log "ERROR: cannot cd $SERVER_ROOT"; return 1; }
 
     # setsid 脱离进程组，避免被 fnOS 的进程组清理误杀；无 setsid 时退回 nohup
     if command -v setsid >/dev/null 2>&1; then
@@ -112,7 +156,7 @@ do_start() {
     # 等 socket 就绪，最长 20 秒
     i=0
     while [ "$i" -lt 20 ]; do
-        [ -S "$SOCKET_PATH" ] && { log "socket ready"; return 0; }
+        socket_ready && { log "socket ready"; return 0; }
         is_running || { log "ERROR: process exited during startup"; return 1; }
         i=$((i + 1))
         sleep 1
@@ -123,7 +167,7 @@ do_start() {
 
 do_stop() {
     if [ ! -f "$PID_FILE" ]; then
-        rm -f "$SOCKET_PATH" 2>/dev/null
+        remove_sockets
         return 0
     fi
     pid="$(cat "$PID_FILE" 2>/dev/null)"
@@ -138,7 +182,8 @@ do_stop() {
         kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
         log "stopped pid=$pid"
     fi
-    rm -f "$PID_FILE" "$SOCKET_PATH" 2>/dev/null
+    rm -f "$PID_FILE" 2>/dev/null
+    remove_sockets
     return 0
 }
 

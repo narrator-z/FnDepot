@@ -3,13 +3,15 @@
 # 注意：用户配置数据由 fnOS 按 data-share 规则处理，这里不乱删共享目录里的数据。
 set -u
 
+# ⚠️ 不要用 [ -d "$cand/app/server" ] 做存在性校验：app.tgz 解包后没有 app/ 这一层
 APP_DIR=""
 for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
-    [ -n "$cand" ] && [ -d "$cand/app/server" ] && { APP_DIR="$cand"; break; }
+    [ -n "$cand" ] && [ -d "$cand" ] && { APP_DIR="$cand"; break; }
 done
 [ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
 
-rm -f "$APP_DIR/target/app.sock" "$APP_DIR/target/chat2api.pid" 2>/dev/null
+# 两个 socket 位置都清（target/ 与应用根目录，详见 cmd/main 的说明）
+rm -f "$APP_DIR/target/app.sock" "$APP_DIR/app.sock" "$APP_DIR/target/chat2api.pid" 2>/dev/null
 rm -f /tmp/chat2api_install.log /tmp/chat2api_upgrade.log 2>/dev/null
 
 exit 0
