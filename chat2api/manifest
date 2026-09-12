@@ -20,4 +20,4 @@ disable_authorization_path = false
 desktop_uidir         = ui
 desktop_applaunchname = chat2api.Application
 install_dep_apps      = nodejs_v22
-changelog             = 修复 1.6.5 安装后打开提示 bad gateway 的问题：cmd/main 用 [ -d "$cand/app/server" ] 判定应用目录，但飞牛解包 app.tgz 后内容铺在应用根目录（server/、ui/），并无 app/ 这一层，导致 TRIM_APPDEST 被全部否掉、回退到不存在路径，server-entry.js 找不到而进程起不来。现改为布局自适应，并同时监听 target/app.sock 与应用根 app.sock（官方文档要求前者，实测本机已装应用都在后者）。
+changelog             = 修复 1.6.5 安装后打开提示 bad gateway 的问题：cmd/main 用 [ -d "$cand/app/server" ] 判定应用目录，但飞牛把 app.tgz 解包到 target（/var/apps/chat2api/target -> /vol3/@appcenter/chat2api），server/、ui/ 直接铺在那里，并没有 app/ 这一层，导致候选项被全部否掉、回退到不存在路径，server-entry.js 找不到而进程起不来。现改为布局自适应：优先 /var/apps/chat2api，运行根取 target 软链，服务端依次尝试 target/server、server、app/server；socket 落在 target/app.sock（与本机已装应用一致），无 target 软链时再补一个应用根位置。

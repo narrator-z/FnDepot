@@ -29,26 +29,33 @@ export PATH="$NODE_BIN_DIR:$PATH"
 # 早期版本正是因此把 TRIM_APPDEST 全部否掉、回退到不存在的 /var/apps/chat2api，
 # 导致 server-entry.js 找不到、进程起不来、网关返回 bad gateway。
 APP_DIR=""
-for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
+for cand in "/var/apps/chat2api" "${TRIM_APPDEST:-}" "/usr/local/apps/@appcenter/chat2api"; do
     [ -n "$cand" ] && [ -d "$cand" ] && { APP_DIR="$cand"; break; }
 done
 [ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
 
-# 服务端根目录布局自适应：
-#   安装后（app.tgz 解包）→ $APP_DIR/server
-#   源码仓库            → $APP_DIR/app/server
-if [ -f "$APP_DIR/server/server-entry.js" ]; then
-    SERVER_ROOT="$APP_DIR/server"
-else
-    SERVER_ROOT="$APP_DIR/app/server"
-fi
+# 运行根（target）：fnOS 把 /var/apps/<app>/target 软链到实际安装卷
+# （如 /vol3/@appcenter/<app>），app.tgz 就解包在这里。
+# 没有软链（例如 TRIM_APPDEST 直接就是解包目录）时退回 APP_DIR 自身。
+RUNTIME_DIR="$APP_DIR/target"
+[ -d "$RUNTIME_DIR" ] || RUNTIME_DIR="$APP_DIR"
+
+# 服务端根目录：依次尝试，命中即用。
+#   安装后（app.tgz 解包到 target）→ $RUNTIME_DIR/server
+#   TRIM_APPDEST 即解包目录        → $APP_DIR/server
+#   源码仓库                       → $APP_DIR/app/server
+SERVER_ROOT=""
+for cand in "$RUNTIME_DIR/server" "$APP_DIR/server" "$APP_DIR/app/server"; do
+    [ -f "$cand/server-entry.js" ] && { SERVER_ROOT="$cand"; break; }
+done
+[ -z "$SERVER_ROOT" ] && SERVER_ROOT="$RUNTIME_DIR/server"
 
 SERVER_JS="$SERVER_ROOT/server-entry.js"
-RUNTIME_DIR="$APP_DIR/target"
-# socket 位置：官方文档要求放 target/ 下，但本机实测 frpc / Harness / fndepot
-# 等已装应用的 socket 都在应用根目录，且 frpc / Harness 压根没有 target/。
-# 规范与实现存在差异，故两个位置都监听，避免赌错一边。
-SOCKET_PATH="$RUNTIME_DIR/app.sock,$APP_DIR/app.sock"
+# socket 位置：官方文档要求放已安装应用的 target/ 下（即 /var/apps/<app>/target/app.sock，
+# 软链后等价于 /vol3/@appcenter/<app>/app.sock，与本机 Harness 等已装应用实测一致）。
+# 两者不是同一目录时（无 target 软链）再补一个 APP_DIR 下的位置，避免赌错一边。
+SOCKET_PATH="$RUNTIME_DIR/app.sock"
+[ "$RUNTIME_DIR" != "$APP_DIR" ] && SOCKET_PATH="$SOCKET_PATH,$APP_DIR/app.sock"
 PID_FILE="$RUNTIME_DIR/chat2api.pid"
 LOG_DIR="$RUNTIME_DIR/logs"
 LOG_FILE="$LOG_DIR/server.log"
@@ -60,7 +67,8 @@ if [ -n "${CHAT2API_DATA_DIR:-}" ]; then
 elif [ -n "${TRIM_DATA_SHARE_PATHS:-}" ]; then
     DATA_DIR="${TRIM_DATA_SHARE_PATHS%%:*}/data"
 else
-    DATA_DIR="$APP_DIR/data"
+    # 落在实际安装卷而不是 /var/apps（那是系统盘，空间小且升级可能被清）
+    DATA_DIR="$RUNTIME_DIR/data"
 fi
 
 # ---------- 端口（仅 API 代理）----------

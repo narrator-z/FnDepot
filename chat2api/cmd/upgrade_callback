@@ -10,13 +10,17 @@ log "==== upgrade_callback 开始 ===="
 
 # ⚠️ 不要用 [ -d "$cand/app/server" ] 做存在性校验：app.tgz 解包后没有 app/ 这一层
 APP_DIR=""
-for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
+for cand in "/var/apps/chat2api" "${TRIM_APPDEST:-}" "/usr/local/apps/@appcenter/chat2api"; do
     [ -n "$cand" ] && [ -d "$cand" ] && { APP_DIR="$cand"; break; }
 done
 [ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
 
-mkdir -p "$APP_DIR/target/logs" 2>/dev/null
-rm -f "$APP_DIR/target/app.sock" "$APP_DIR/app.sock" "$APP_DIR/target/chat2api.pid" 2>/dev/null
+RUNTIME_DIR="$APP_DIR/target"
+[ -d "$RUNTIME_DIR" ] || RUNTIME_DIR="$APP_DIR"
+
+mkdir -p "$RUNTIME_DIR/logs" 2>/dev/null
+# 两个位置都清：target 软链存在时它们不同，残留的旧 socket 会让新版启动时 EADDRINUSE
+rm -f "$RUNTIME_DIR/app.sock" "$APP_DIR/app.sock" "$RUNTIME_DIR/chat2api.pid" 2>/dev/null
 
 # 从旧版（1.3.4 及更早，nx5888 版）升级的端口变更提示：
 # 旧版管理界面占 8081、API 占 8080，均属飞牛第三方应用拥挤端口段；

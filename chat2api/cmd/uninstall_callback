@@ -5,13 +5,16 @@ set -u
 
 # ⚠️ 不要用 [ -d "$cand/app/server" ] 做存在性校验：app.tgz 解包后没有 app/ 这一层
 APP_DIR=""
-for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
+for cand in "/var/apps/chat2api" "${TRIM_APPDEST:-}" "/usr/local/apps/@appcenter/chat2api"; do
     [ -n "$cand" ] && [ -d "$cand" ] && { APP_DIR="$cand"; break; }
 done
 [ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
 
+RUNTIME_DIR="$APP_DIR/target"
+[ -d "$RUNTIME_DIR" ] || RUNTIME_DIR="$APP_DIR"
+
 # 两个 socket 位置都清（target/ 与应用根目录，详见 cmd/main 的说明）
-rm -f "$APP_DIR/target/app.sock" "$APP_DIR/app.sock" "$APP_DIR/target/chat2api.pid" 2>/dev/null
+rm -f "$RUNTIME_DIR/app.sock" "$APP_DIR/app.sock" "$RUNTIME_DIR/chat2api.pid" 2>/dev/null
 rm -f /tmp/chat2api_install.log /tmp/chat2api_upgrade.log 2>/dev/null
 
 exit 0

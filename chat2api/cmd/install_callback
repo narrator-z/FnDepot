@@ -18,20 +18,23 @@ log "==== install_callback 开始 ===="
 # ---------- 1. 目录定位 ----------
 # ⚠️ 不要用 [ -d "$cand/app/server" ] 做存在性校验：app.tgz 解包后内容铺在应用根目录
 # （server/、ui/），没有 app/ 这一层，那样会把 TRIM_APPDEST 全部否掉。
+# 优先 /var/apps/<app>：manifest 与 cmd 装在这里，且 target 软链到实际安装卷。
 APP_DIR=""
-for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
+for cand in "/var/apps/chat2api" "${TRIM_APPDEST:-}" "/usr/local/apps/@appcenter/chat2api"; do
     [ -n "$cand" ] && [ -d "$cand" ] && { APP_DIR="$cand"; break; }
 done
 [ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
 log "APP_DIR=$APP_DIR"
 
-# 布局自适应：安装后是 $APP_DIR/server，源码仓库是 $APP_DIR/app/server
-if [ -f "$APP_DIR/server/server-entry.js" ]; then
-    SERVER_DIR="$APP_DIR/server"
-else
-    SERVER_DIR="$APP_DIR/app/server"
-fi
 RUNTIME_DIR="$APP_DIR/target"
+[ -d "$RUNTIME_DIR" ] || RUNTIME_DIR="$APP_DIR"
+log "RUNTIME_DIR=$RUNTIME_DIR"
+
+SERVER_DIR=""
+for cand in "$RUNTIME_DIR/server" "$APP_DIR/server" "$APP_DIR/app/server"; do
+    [ -f "$cand/server-entry.js" ] && { SERVER_DIR="$cand"; break; }
+done
+[ -z "$SERVER_DIR" ] && SERVER_DIR="$RUNTIME_DIR/server"
 log "SERVER_DIR=$SERVER_DIR"
 
 # ---------- 2. Node.js 运行时校验 ----------
@@ -48,8 +51,8 @@ if [ -n "${TRIM_DATA_SHARE_PATHS:-}" ]; then
     mkdir -p "${TRIM_DATA_SHARE_PATHS%%:*}/data" 2>/dev/null
     log "数据目录: ${TRIM_DATA_SHARE_PATHS%%:*}/data"
 else
-    mkdir -p "$APP_DIR/data" 2>/dev/null
-    log "数据目录: $APP_DIR/data"
+    mkdir -p "$RUNTIME_DIR/data" 2>/dev/null
+    log "数据目录: $RUNTIME_DIR/data"
 fi
 
 # ---------- 4. 端口校验 ----------
