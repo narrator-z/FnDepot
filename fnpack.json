@@ -32,7 +32,7 @@
   "chat2api": {
     "display_name": "Chat2API",
     "platform": "all",
-    "version": "1.6.8",
+    "version": "1.6.9",
     "desc": "统一管理多个 AI 服务商（DeepSeek/GLM/Kimi/Qwen 等），对外提供 OpenAI 兼容接口转发。",
     "labels": "AI,API代理,开发工具",
     "distributor": "narrator-z",
@@ -40,8 +40,8 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "false",
-    "size": "22488.53KB",
-    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vchat2api-1.6.8/chat2api_all.fpk",
-    "changelog": "1.6.8 完整可用版：内置 Chat2API-WXS 核心（core/ + node_modules/，含 canvas 原生模块，Debian 12/glibc 2.36 构建），安装即运行，无需额外构建步骤。管理界面走飞牛统一网关 /app/chat2api（Unix Socket，复用 NAS 登录态，不占 TCP 端口），OpenAI 兼容 API 代理端口 26800。"
+    "size": "22488.54KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vchat2api-1.6.9/chat2api_all.fpk",
+    "changelog": "修复 1.6.8 安装后管理界面白屏：构建产物保留了裸 require(\"electron\")，但 fpk 内没有 electron 包（构建时跳过二进制下载并被 npm prune 清掉），require 抛 Cannot find module 'electron'，又被 adapter 的 locateEntry() 静默吞掉、误报「未找到主进程产物」，导致 /api/ipc 全部返回 core_not_ready、前端拿不到数据而空白。现随包附带纯 Node 的 electron 替身包（node_modules/electron，由 build-inner.sh 在 npm prune 后落位），并让 locateEntry() 在 require 失败时抛出真实原因。1.6.8 完整可用版：内置 Chat2API-WXS 核心（core/ + node_modules/，含 canvas 原生模块，Debian 12/glibc 2.36 构建）。管理界面走飞牛统一网关 /app/chat2api（Unix Socket，复用 NAS 登录态），OpenAI 兼容 API 代理端口 26800。"
   }
 }
