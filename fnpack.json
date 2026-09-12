@@ -40,7 +40,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "false",
-    "size": "168.95KB",
+    "size": "168.89KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vchat2api-1.6.6/chat2api_all.fpk",
     "changelog": "1.6.6 修复安装后打开提示 bad gateway：cmd/main 用 [ -d \"$cand/app/server\" ] 判定应用目录，但飞牛解包 app.tgz 后 server/、ui/ 直接铺在应用根目录，并无 app/ 这一层，导致 TRIM_APPDEST 被全部否掉、回退到不存在路径，server-entry.js 找不到，进程起不来。现改为布局自适应（server/ 与 app/server 都认），并在 target/app.sock 与应用根 app.sock 两个位置同时监听Unix Socket（官方文档要求前者，本机已装应用实测都在后者），避免赌错一边；do_start 的旧 socket 清理改为逐个删除（原先 rm -f 整串逗号路径一个都删不掉，重启会残留）。 1.6.5 基于 Chat2API-WXS v1.6.5 重构（非 Docker 的 Node.js 原生应用）：新增 OAuth 登录、上下文管理、工具调用、模型映射与自定义供应商支持。端口策略变更——管理界面由 8081 改为飞牛统一网关 /app/chat2api（监听 Unix Socket，复用 NAS 登录态，不占 TCP 端口），OpenAI API 代理由 8080 改为 26800，避开飞牛第三方应用拥挤的 8080-8099 区间；外部客户端需同步改地址。改用飞牛官方 Node.js 22 运行时（install_dep_apps=nodejs_v22），不再自建 systemd，进程由 fnOS 经 cmd/main 管理。当前为骨架验证版本：核心业务逻辑需执行 build/build-server.sh 在 node:22-slim 中构建后接入（依赖含 canvas 原生模块，禁止 Windows 构建、禁止 alpine）。"
   }
