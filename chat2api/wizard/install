@@ -1,0 +1,55 @@
+[
+    {
+        "stepTitle": "访问方式",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "Chat2API 统一管理多个 AI 服务商，对外提供 OpenAI 兼容接口。\n• 管理界面：飞牛统一网关 http://<飞牛地址>/app/chat2api （复用 NAS 登录态，不占端口）\n• OpenAI API 代理：http://<飞牛地址>:26800/v1 （供 Cline、Cherry Studio 等外部客户端调用）"
+            }
+        ]
+    },
+    {
+        "stepTitle": "API 代理端口",
+        "items": [
+            {
+                "type": "text",
+                "field": "wizard_app_port",
+                "label": "API 代理端口",
+                "initValue": "26800",
+                "helpText": "外部 OpenAI 客户端访问本服务用的端口。26800 已避开飞牛第三方应用常用的 8080-8099 拥挤区间；若仍冲突可自行更换。",
+                "rules": [
+                    {
+                        "required": true,
+                        "message": "请输入端口号"
+                    },
+                    {
+                        "pattern": "^\\d+$",
+                        "message": "端口号必须为数字"
+                    }
+                ]
+            },
+            { "type": "tips", "helpText": "管理界面走统一网关，不占用 TCP 端口，无需在此配置。" }
+        ]
+    },
+    {
+        "stepTitle": "管理密钥",
+        "items": [
+            {
+                "type": "password",
+                "field": "chat2api_admin_key",
+                "label": "API 访问密钥",
+                "initValue": "",
+                "helpText": "可选。设置后，调用 OpenAI 兼容接口需在请求头带上 Authorization: Bearer <密钥>，避免 NAS 上的服务被局域网内其他人白用。留空表示不鉴权。",
+                "rules": []
+            },
+            { "type": "tips", "helpText": "外部客户端（Cline / Cherry Studio / NextChat）填写 API 地址时用 http://<飞牛地址>:26800/v1，API Key 填这里设的密钥。" }
+        ]
+    },
+    {
+        "stepTitle": "注意事项",
+        "items": [
+            { "type": "tips", "helpText": "⚠️ 本应用依赖飞牛官方「Node.js v22」运行时，安装时会自动拉取；若安装后无法启动，请在应用中心确认该依赖已就绪。" },
+            { "type": "tips", "helpText": "⚠️ 从旧版（1.3.4 及更早）升级：管理界面端口由 8081 改为统一网关，API 端口由 8080 改为 26800，外部客户端需同步修改地址。" }
+        ]
+    }
+]

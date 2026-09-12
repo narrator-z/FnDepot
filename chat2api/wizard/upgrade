@@ -1,0 +1,10 @@
+[
+    {
+        "stepTitle": "升级说明",
+        "items": [
+            { "type": "tips", "helpText": "本次基于 Chat2API-WXS v1.6.5 重构：新增 OAuth 登录、上下文管理、工具调用、模型映射与自定义供应商支持。" },
+            { "type": "tips", "helpText": "⚠️ 端口策略变更：管理界面由 8081 改为飞牛统一网关 /app/chat2api（不占端口，复用 NAS 登录态）；API 代理由 8080 改为 26800。外部客户端需同步修改地址。" },
+            { "type": "tips", "helpText": "升级不会删除已有的服务商配置与密钥。" }
+        ]
+    }
+]

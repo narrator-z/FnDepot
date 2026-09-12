@@ -1,0 +1,11 @@
+# WXS 源码克隆目录（build-server.sh / CI 构建时生成）
+build/.src/
+
+# 运行时依赖：必须在 Linux 下构建（含 canvas 原生模块），由 CI 产出，不入库
+app/server/node_modules/
+
+# 打包中间产物
+app.tgz
+
+# 注意：chat2api_all.fpk 需要入库 —— publish.yml 会把 fpk 提交回仓库，
+# fnpack.json 的 download_url 指向 GitHub Release，但仓库内也保留一份便于回滚。

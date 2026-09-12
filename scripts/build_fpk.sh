@@ -40,6 +40,11 @@ if [[ ! -d "$APP_DIR" ]]; then
   exit 1
 fi
 
+# 统一转成绝对路径：后面会在 $STAGE 子 shell 里引用 $APP_DIR / $OUT_DIR，
+# 若此处是相对路径，cd 之后就会指到错误位置（fpk 写不出来）。
+APP_DIR="$(cd "$APP_DIR" && pwd)"
+mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 APP_NAME="$(basename "$APP_DIR")"
 
 # --- sanity checks ---------------------------------------------------------
@@ -55,7 +60,6 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
-mkdir -p "$OUT_DIR"
 WORK="$(mktemp -d)"
 STAGE="$WORK/stage"
 APP_TGZ="$WORK/app.tgz"

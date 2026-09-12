@@ -1,0 +1,17 @@
+{
+    ".url": {
+        "chat2api.Application": {
+            "title": "Chat2API",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "",
+            "gatewayPrefix": "/app/chat2api",
+            "gatewaySocket": "app.sock",
+            "url": "/app/chat2api",
+            "allUsers": true,
+            "control": {
+                "accessPerm": "editable"
+            }
+        }
+    }
+}

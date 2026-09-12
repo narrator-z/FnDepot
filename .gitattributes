@@ -1,0 +1,10 @@
+# fnOS 生命周期脚本与构建脚本必须保持 LF 换行。
+#
+# 原因：本机 Windows 默认 core.autocrlf=true，检出时 LF 会被转成 CRLF。
+#   1) CRLF 的 shell 脚本在飞牛上执行会直接报 "bad interpreter"；
+#   2) 在 Windows 本地打包时，CRLF 会被原样打进 fpk，装到 NAS 上才暴露问题。
+# 这里显式锁定 LF，无论谁在哪个平台检出都一致。
+
+*.sh text eol=lf
+*/cmd/* text eol=lf
+*/manifest text eol=lf

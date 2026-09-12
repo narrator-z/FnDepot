@@ -1,0 +1,22 @@
+{
+    "data-share": {
+        "shares": [
+            {
+                "name": "chat2api",
+                "permission": {
+                    "rw": [
+                        "chat2api"
+                    ]
+                }
+            },
+            {
+                "name": "chat2api/data",
+                "permission": {
+                    "rw": [
+                        "chat2api"
+                    ]
+                }
+            }
+        ]
+    }
+}

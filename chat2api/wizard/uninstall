@@ -1,0 +1,9 @@
+[
+    {
+        "stepTitle": "卸载 Chat2API",
+        "items": [
+            { "type": "tips", "helpText": "卸载会停止服务并移除应用文件。AI 服务商配置、会话与密钥等数据保存在本应用的数据目录中，卸载前请确认是否已备份。" },
+            { "type": "tips", "helpText": "若外部客户端（Cline / Cherry Studio 等）已配置 http://<飞牛地址>:26800/v1，卸载后请记得移除或改指其它服务。" }
+        ]
+    }
+]

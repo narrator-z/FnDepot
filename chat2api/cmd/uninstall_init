@@ -1,0 +1,4 @@
+#!/bin/bash
+# 卸载前：先停服务，避免卸载时文件被占用
+[ -x "${TRIM_APPDEST:-/var/apps/chat2api}/cmd/main" ] && "${TRIM_APPDEST:-/var/apps/chat2api}/cmd/main" stop >/dev/null 2>&1
+exit 0

@@ -1,0 +1,7 @@
+{
+  "defaults": {
+    "run-as": "package"
+  },
+  "username": "chat2api",
+  "groupname": "chat2api"
+}

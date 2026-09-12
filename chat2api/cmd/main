@@ -1,0 +1,171 @@
+#!/bin/bash
+# Chat2API fnOS 生命周期管理
+# 用法: cmd/main {start|stop|restart|status}
+#
+# 设计要点：
+#   1) Node.js 用飞牛官方运行时 nodejs_v22（manifest 里 install_dep_apps 声明），不自己装。
+#   2) 管理界面监听 Unix Socket（${TRIM_APPDEST}/target/app.sock），由飞牛统一网关
+#      挂到 /app/chat2api —— 不占 TCP 端口，天然无端口冲突。
+#   3) OpenAI API 代理监听 TCP 26800（外部客户端必须走 IP+端口，无法走需登录的网关）。
+#      端口取 fnOS 注入的 TRIM_SERVICE_PORT，回退 manifest 的 service_port。
+#   4) 进程由 fnOS 框架经本脚本管理，不自建 systemd。
+
+set -u
+
+# ---------- Node.js 运行时 ----------
+NODE_BIN_DIR="/var/apps/nodejs_v22/target/bin"
+export PATH="$NODE_BIN_DIR:$PATH"
+
+# ---------- 目录定位 ----------
+# TRIM_APPDEST 由 fnOS 注入（通常 /var/apps/chat2api），兼容旧式安装路径
+APP_DIR=""
+for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
+    [ -n "$cand" ] && [ -d "$cand/app/server" ] && { APP_DIR="$cand"; break; }
+done
+[ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
+
+SERVER_JS="$APP_DIR/app/server/server-entry.js"
+RUNTIME_DIR="$APP_DIR/target"
+SOCKET_PATH="$RUNTIME_DIR/app.sock"
+PID_FILE="$RUNTIME_DIR/chat2api.pid"
+LOG_DIR="$RUNTIME_DIR/logs"
+LOG_FILE="$LOG_DIR/server.log"
+STATIC_DIR="$APP_DIR/app/server/public"
+
+# ---------- 数据目录 ----------
+if [ -n "${CHAT2API_DATA_DIR:-}" ]; then
+    DATA_DIR="$CHAT2API_DATA_DIR"
+elif [ -n "${TRIM_DATA_SHARE_PATHS:-}" ]; then
+    DATA_DIR="${TRIM_DATA_SHARE_PATHS%%:*}/data"
+else
+    DATA_DIR="$APP_DIR/data"
+fi
+
+# ---------- 端口（仅 API 代理）----------
+# 优先级：安装向导字段 wizard_app_port > fnOS 注入的 TRIM_SERVICE_PORT > manifest 默认值。
+#
+# 为什么向导值必须排在 TRIM_SERVICE_PORT 前面：
+#   官方文档明确 TRIM_SERVICE_PORT 来自 manifest.service_port，是静态值，不随向导变化。
+#   若让它在前，用户在安装向导里改了端口也永远是 manifest 里的 26800，改了等于没改。
+# 注意：飞牛把向导字段的值以「字段名」注入环境变量（例如 $wizard_app_port），
+# 不是臆造的 CHAT2API_PORT 之类，取不到值时静默回退默认值。
+API_PORT="${wizard_app_port:-}"
+[ -z "$API_PORT" ] && API_PORT="${TRIM_SERVICE_PORT:-}"
+[ -z "$API_PORT" ] && API_PORT="26800"
+case "$API_PORT" in
+    ''|*[!0-9]*) API_PORT="26800" ;;
+esac
+
+mkdir -p "$RUNTIME_DIR" "$LOG_DIR" "$DATA_DIR" 2>/dev/null
+
+log() {
+    # 同时输出 stdout（框架统一收集）与日志文件（事后排查）
+    echo "[$(date '+%F %T')] $*"
+    echo "[$(date '+%F %T')] $*" >>"$LOG_FILE" 2>/dev/null
+    return 0
+}
+
+is_running() {
+    [ -f "$PID_FILE" ] || return 1
+    pid="$(cat "$PID_FILE" 2>/dev/null)"
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null
+}
+
+do_start() {
+    if is_running; then
+        log "already running (pid $(cat "$PID_FILE"))"
+        return 0
+    fi
+
+    if [ ! -f "$SERVER_JS" ]; then
+        log "ERROR: $SERVER_JS not found"
+        return 1
+    fi
+
+    if ! command -v node >/dev/null 2>&1; then
+        log "ERROR: node not found in $NODE_BIN_DIR"
+        return 1
+    fi
+
+    # 清理上次残留的 socket，否则新版启动会 EADDRINUSE
+    rm -f "$SOCKET_PATH" 2>/dev/null
+
+    export NODE_ENV=production
+    export API_PORT
+    export SOCKET_PATH
+    export DATA_DIR
+    export STATIC_DIR
+    export CHAT2API_DATA_DIR="$DATA_DIR"
+
+    cd "$APP_DIR/app/server" || return 1
+
+    # setsid 脱离进程组，避免被 fnOS 的进程组清理误杀；无 setsid 时退回 nohup
+    if command -v setsid >/dev/null 2>&1; then
+        setsid node "$SERVER_JS" >>"$LOG_FILE" 2>&1 </dev/null &
+    else
+        nohup node "$SERVER_JS" >>"$LOG_FILE" 2>&1 </dev/null &
+    fi
+    echo $! >"$PID_FILE"
+    log "started pid=$(cat "$PID_FILE") api_port=$API_PORT socket=$SOCKET_PATH"
+
+    # 等 socket 就绪，最长 20 秒
+    i=0
+    while [ "$i" -lt 20 ]; do
+        [ -S "$SOCKET_PATH" ] && { log "socket ready"; return 0; }
+        is_running || { log "ERROR: process exited during startup"; return 1; }
+        i=$((i + 1))
+        sleep 1
+    done
+    log "WARN: socket not ready after 20s (API 端口可能仍可用)"
+    return 0
+}
+
+do_stop() {
+    if [ ! -f "$PID_FILE" ]; then
+        rm -f "$SOCKET_PATH" 2>/dev/null
+        return 0
+    fi
+    pid="$(cat "$PID_FILE" 2>/dev/null)"
+    if [ -n "$pid" ]; then
+        kill "$pid" 2>/dev/null
+        i=0
+        while [ "$i" -lt 10 ]; do
+            kill -0 "$pid" 2>/dev/null || break
+            i=$((i + 1))
+            sleep 1
+        done
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+        log "stopped pid=$pid"
+    fi
+    rm -f "$PID_FILE" "$SOCKET_PATH" 2>/dev/null
+    return 0
+}
+
+case "${1:-}" in
+    start)
+        do_start
+        ;;
+    stop)
+        do_stop
+        ;;
+    restart)
+        do_stop
+        sleep 1
+        do_start
+        ;;
+    status)
+        # 运行中 exit 0；已停止 exit 3（fnOS 以此判断应用状态）
+        if is_running; then
+            exit 0
+        fi
+        exit 3
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+# 回调类场景一律不阻塞安装/升级
+exit 0

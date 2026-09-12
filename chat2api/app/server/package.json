@@ -1,0 +1,16 @@
+{
+  "name": "chat2api-fnos",
+  "version": "1.6.5",
+  "private": true,
+  "description": "Chat2API for 飞牛 fnOS — 统一管理多个 AI 服务商，提供 OpenAI 兼容接口",
+  "main": "server-entry.js",
+  "scripts": {
+    "start": "node server-entry.js",
+    "dev": "node server-entry.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

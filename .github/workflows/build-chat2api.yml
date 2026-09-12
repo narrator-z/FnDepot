@@ -1,0 +1,97 @@
+name: Build Chat2API Core
+
+# 为什么需要这个工作流：
+#   Chat2API-WXS 依赖 canvas 等原生模块（.node），必须在 Linux + glibc 下构建；
+#   本机没有 Docker，而 GitHub Actions 的 runner 就是现成的 Linux 环境。
+#
+# 为什么指定 container: node:22-bookworm-slim，而不是直接用 ubuntu-latest：
+#   ubuntu-latest 现在是 Ubuntu 24.04（glibc 2.39），而飞牛 fnOS 是 Debian 12
+#   （glibc 2.36）。在高版本 glibc 上编译出的原生模块，放到低版本 glibc 上会因
+#   符号版本缺失直接加载失败（glibc 只向后兼容）。bookworm 即 Debian 12，
+#   与飞牛同源，glibc 完全一致 —— 这是唯一能规避该风险的方式。
+#
+# 职责边界：
+#   本工作流只负责「构建 WXS 核心 + 打包 fpk」，产物以 Artifact 提供（不建 Release、
+#   不写回仓库，避免与 publish.yml 抢同一个 tag）。
+#   骨架包（不含核心）的自动发布由既有的 publish.yml 负责 —— fnpack.json 里
+#   chat2api 的版本一变更，它就会自动打包并发 Release。
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_ref:
+        description: 'Chat2API-WXS 的分支或 tag'
+        type: string
+        required: false
+        default: 'main'
+      pack_fpk:
+        description: '同时打包为 fpk'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: node:22-bookworm-slim
+    steps:
+      - name: 安装系统依赖
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential python3 pkg-config git ca-certificates jq gzip tar \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+          rm -rf /var/lib/apt/lists/*
+          # 容器内 checkout 常因目录属主不同被 git 拒绝
+          git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 构建 Chat2API-WXS 核心
+        env:
+          SRC_DIR: /tmp/wxs
+          OUT_DIR: ${{ github.workspace }}/chat2api/app/server
+          # 经 env 传参而非直接内联 ${{ }}，避免用户输入被当作 shell 执行
+          CORE_REF: ${{ inputs.core_ref }}
+          # 不下载 Electron 二进制：fnOS 上不启动 GUI，几百 MB 纯属浪费
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+          CYPRESS_INSTALL_BINARY: '0'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$CORE_REF" \
+            https://github.com/narrator-z/Chat2API-WXS.git "$SRC_DIR"
+          SRC_DIR="$SRC_DIR" OUT_DIR="$OUT_DIR" bash chat2api/build/build-inner.sh
+
+      - name: 打包 fpk
+        if: ${{ inputs.pack_fpk }}
+        run: bash scripts/build_fpk.sh chat2api chat2api all
+
+      - name: 输出包信息
+        if: ${{ inputs.pack_fpk }}
+        run: |
+          FPK=chat2api/chat2api_all.fpk
+          echo "size: $(stat -c%s "$FPK") bytes"
+          echo "--- fpk 内容 ---"
+          tar -tzf "$FPK" | sort
+
+      - name: 上传 fpk
+        if: ${{ inputs.pack_fpk }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat2api_all.fpk
+          path: chat2api/chat2api_all.fpk
+          retention-days: 30
+
+      - name: 上传核心产物
+        if: ${{ !inputs.pack_fpk }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat2api-core
+          path: chat2api/app/server/
+          retention-days: 30

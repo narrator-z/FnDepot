@@ -1,0 +1,15 @@
+#!/bin/bash
+# 卸载后：清理 socket、pid、临时文件。
+# 注意：用户配置数据由 fnOS 按 data-share 规则处理，这里不乱删共享目录里的数据。
+set -u
+
+APP_DIR=""
+for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
+    [ -n "$cand" ] && [ -d "$cand/app/server" ] && { APP_DIR="$cand"; break; }
+done
+[ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
+
+rm -f "$APP_DIR/target/app.sock" "$APP_DIR/target/chat2api.pid" 2>/dev/null
+rm -f /tmp/chat2api_install.log /tmp/chat2api_upgrade.log 2>/dev/null
+
+exit 0

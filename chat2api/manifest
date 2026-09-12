@@ -1,0 +1,23 @@
+appname               = chat2api
+display_name          = Chat2API
+desc                  = 统一管理多个 AI 服务商：DeepSeek、GLM、Kimi、Qwen 等，提供 OpenAI 兼容 API 接口转发。<br>• OpenAI API 代理端口：26800<br>• 管理界面：系统统一网关 /app/chat2api（Unix Socket，不占端口）<br>• 支持 OAuth 登录、上下文管理、工具调用、模型映射、自定义供应商
+source                = thirdparty
+maintainer            = narrator-z
+maintainer_url        = https://github.com/narrator-z
+distributor           = narrator-z
+distributor_url       = https://github.com/narrator-z/FnDepot
+icon                  = ICON.PNG
+main                  = cmd/main
+platform              = all
+micro_app             = true
+os_min_version        = 1.0.0
+version               = 1.6.5
+install_type          = 系统空间
+ctl_stop              = true
+service_port          = 26800
+checkport             = true
+disable_authorization_path = false
+desktop_uidir         = ui
+desktop_applaunchname = chat2api.Application
+install_dep_apps      = nodejs_v22
+changelog             = 基于 Chat2API-WXS v1.6.5 重新构建：新增 OAuth 登录、上下文管理、工具调用、模型映射与自定义供应商支持。管理界面改用飞牛统一网关 /app/chat2api（监听 Unix Socket，复用 NAS 登录态，不占 TCP 端口），OpenAI API 代理端口改为 26800 以避开 8080-8099 等常规端口拥挤区间。改用飞牛官方 Node.js 22 运行时（install_dep_apps=nodejs_v22），不再自建 systemd 服务，进程由 fnOS 框架经 cmd/main 管理。

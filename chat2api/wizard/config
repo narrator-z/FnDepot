@@ -1,0 +1,38 @@
+[
+    {
+        "stepTitle": "API 代理端口",
+        "items": [
+            {
+                "type": "text",
+                "field": "wizard_app_port",
+                "label": "API 代理端口",
+                "initValue": "26800",
+                "helpText": "修改后需重启应用生效。26800 已避开飞牛第三方应用常用的 8080-8099 拥挤区间。",
+                "rules": [
+                    {
+                        "required": true,
+                        "message": "请输入端口号"
+                    },
+                    {
+                        "pattern": "^\\d+$",
+                        "message": "端口号必须为数字"
+                    }
+                ]
+            },
+            { "type": "tips", "helpText": "管理界面走统一网关 /app/chat2api，不占端口，无需配置。" }
+        ]
+    },
+    {
+        "stepTitle": "管理密钥",
+        "items": [
+            {
+                "type": "password",
+                "field": "chat2api_admin_key",
+                "label": "API 访问密钥",
+                "initValue": "",
+                "helpText": "留空表示不鉴权。修改后调用方需同步更新 API Key。",
+                "rules": []
+            }
+        ]
+    }
+]

@@ -1,0 +1,84 @@
+#!/bin/bash
+# 安装后：校验运行时与端口、准备目录与依赖。
+#
+# 铁律（踩过坑才定的）：
+#   1) 全程 exit 0，任何失败都不阻塞安装 —— 缺依赖也先把应用装上，用户能在日志里看到原因。
+#   2) 绝不同步等待服务就绪：fnOS 要等回调返回才继续，同步等待会死锁在「安装中」。
+#
+# 日志：/tmp/chat2api_install.log
+
+set -u
+LOG="/tmp/chat2api_install.log"
+# 同时输出 stdout 与日志文件：飞牛框架会统一收集生命周期脚本的标准输出，
+# 只写自己的日志文件会让「安装失败」时用户看不到任何原因。
+log() { echo "[$(date '+%F %T')] $*"; echo "[$(date '+%F %T')] $*" >>"$LOG" 2>/dev/null; return 0; }
+
+log "==== install_callback 开始 ===="
+
+# ---------- 1. 目录定位 ----------
+APP_DIR=""
+for cand in "${TRIM_APPDEST:-}" "/var/apps/chat2api" "/usr/local/apps/@appcenter/chat2api"; do
+    [ -n "$cand" ] && [ -d "$cand/app/server" ] && { APP_DIR="$cand"; break; }
+done
+[ -z "$APP_DIR" ] && APP_DIR="${TRIM_APPDEST:-/var/apps/chat2api}"
+log "APP_DIR=$APP_DIR"
+
+SERVER_DIR="$APP_DIR/app/server"
+RUNTIME_DIR="$APP_DIR/target"
+
+# ---------- 2. Node.js 运行时校验 ----------
+export PATH="/var/apps/nodejs_v22/target/bin:$PATH"
+if command -v node >/dev/null 2>&1; then
+    log "Node.js: $(node -v 2>/dev/null) at $(command -v node)"
+else
+    log "WARN: 未找到 nodejs_v22 运行时，应用可能启动失败。请在应用中心确认已安装「Node.js v22」依赖。"
+fi
+
+# ---------- 3. 目录准备 ----------
+mkdir -p "$RUNTIME_DIR" "$RUNTIME_DIR/logs" 2>/dev/null
+if [ -n "${TRIM_DATA_SHARE_PATHS:-}" ]; then
+    mkdir -p "${TRIM_DATA_SHARE_PATHS%%:*}/data" 2>/dev/null
+    log "数据目录: ${TRIM_DATA_SHARE_PATHS%%:*}/data"
+else
+    mkdir -p "$APP_DIR/data" 2>/dev/null
+    log "数据目录: $APP_DIR/data"
+fi
+
+# ---------- 4. 端口校验 ----------
+# fnOS 的 checkport=true 会在启动前检查；这里做二次校验，只记录不阻断，
+# 便于用户在「安装失败」时从日志里直接看到是谁占了 26800。
+# 优先级须与 cmd/main 一致：向导值 > TRIM_SERVICE_PORT（manifest 静态值）> 26800
+PORT="${wizard_app_port:-}"
+[ -z "$PORT" ] && PORT="${TRIM_SERVICE_PORT:-}"
+[ -z "$PORT" ] && PORT="26800"
+case "$PORT" in ''|*[!0-9]*) PORT="26800" ;; esac
+if command -v ss >/dev/null 2>&1; then
+    BUSY="$(ss -ltnp 2>/dev/null | grep -c ":$PORT ")"
+elif command -v netstat >/dev/null 2>&1; then
+    BUSY="$(netstat -ltnp 2>/dev/null | grep -c ":$PORT ")"
+else
+    BUSY="0"
+fi
+if [ "${BUSY:-0}" != "0" ]; then
+    log "WARN: 端口 $PORT 已被占用，API 代理可能无法启动。请在应用设置中更换端口。"
+else
+    log "端口 $PORT 可用"
+fi
+
+# ---------- 5. 依赖校验 ----------
+# 正式包里 app/server/node_modules 由 build/Dockerfile 在 Linux 下构建后一并打包，
+# 这里只做存在性检查；缺失时记录原因（Windows 构建的 node_modules 在飞牛上必崩，不能就地补装）。
+if [ -f "$SERVER_DIR/package.json" ]; then
+    if [ -d "$SERVER_DIR/node_modules" ] && [ -n "$(ls -A "$SERVER_DIR/node_modules" 2>/dev/null)" ]; then
+        log "node_modules 已内置 ($(ls -1 "$SERVER_DIR/node_modules" 2>/dev/null | wc -l) 个包)"
+    else
+        log "WARN: 缺少 node_modules，且不在 NAS 上就地安装（原生模块需用 Linux 构建）。请重新打包。"
+    fi
+fi
+
+if [ ! -f "$SERVER_DIR/server-entry.js" ]; then
+    log "WARN: 未找到 server-entry.js，服务端未就绪（骨架阶段属正常，接入 Chat2API-WXS 后消失）"
+fi
+
+log "==== install_callback 结束 ===="
+exit 0
