@@ -40,12 +40,15 @@ function locateEntry() {
   const rawDir = path.join(__dirname, 'raw');
   const dirs = [rawDir, __dirname];
 
+  const failures = [];
+
   for (const dir of dirs) {
     let files = [];
     try {
       if (!fs.existsSync(dir)) continue;
       files = fs.readdirSync(dir).filter((f) => f.endsWith('.js') || f.endsWith('.cjs'));
     } catch (e) {
+      failures.push(dir + ' (readdir): ' + (e && e.message ? e.message : e));
       continue;
     }
 
@@ -55,13 +58,20 @@ function locateEntry() {
         const mod = require(full);
         const candidate = pickExport(mod, 'dispatchIpc');
         if (typeof candidate === 'function') return full;
+        // 能 require 但没有 dispatchIpc：可能只是被别的 chunk 依赖的片段，不算硬失败
       } catch (e) {
-        // 某个 chunk 单独 require 失败很正常（它可能是被别的 chunk 依赖的片段），跳过
-        continue;
+        // 记录失败原因：真正的入口 require 失败（例如缺模块）必须让调用方看到，
+        // 而不是被静默吞掉后误报「未找到主进程产物」。
+        failures.push(full + ': ' + (e && e.message ? e.message : e));
       }
     }
   }
-  return null;
+
+  // 扫描完全部落空：抛出真实原因，绝不静默返回 null。
+  throw new Error(
+    '未找到可用的主进程入口（core/raw 下 require 均失败）: ' +
+    (failures.length ? failures.join(' | ') : '目录下没有 .js/.cjs 文件')
+  );
 }
 
 /**
@@ -86,10 +96,9 @@ const api = {
 };
 
 async function boot() {
+  // locateEntry() 失败时会直接 throw（含每个候选的真实 require 失败原因），
+  // 这里不再包一层误导性的「构建产物不完整」文案。
   const entryPath = locateEntry();
-  if (!entryPath) {
-    throw new Error('未找到主进程产物 core/raw/fnos-entry.js，构建产物不完整');
-  }
 
   console.log('[chat2api] loading core from ' + entryPath);
   const mod = require(entryPath);

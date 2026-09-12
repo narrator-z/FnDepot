@@ -1,0 +1,6 @@
+{
+  "name": "electron",
+  "version": "0.0.0-fnos-shim",
+  "main": "index.js",
+  "private": true
+}

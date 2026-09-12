@@ -97,6 +97,20 @@ else
   echo "  ⚠ 未找到 $FNOS_ENTRY_SRC（core-dev 尚未交付）。将仅构建原 index 入口，fnos-entry 产物暂缺。"
 fi
 
+# ---------- 2.5 运行期 electron 替身包 ----------
+# electron-vite 的 main 构建把 `electron` 当 external，产物 CJS 会原样保留
+# `require("electron")`；而 fpk 里没有真正的 electron 包（devDep 被 prune 掉）。
+# 因此把纯 CJS 替身落成 node_modules/electron/index.js，让那条 require 命中它。
+# 必须在 npm prune 之后执行（见第 6 步末尾的兜底），这里只做拷贝准备。
+ELECTRON_CJS_SRC="$SHIM_DIR/electron-node.cjs"
+ELECTRON_PKG_SRC="$SHIM_DIR/electron-shim-package.json"
+if [ -f "$ELECTRON_CJS_SRC" ] && [ -f "$ELECTRON_PKG_SRC" ]; then
+  SHIM_ELECTRON_OK=1
+else
+  SHIM_ELECTRON_OK=0
+  echo "  ⚠ 未找到 $ELECTRON_CJS_SRC 或 $ELECTRON_PKG_SRC（运行期 electron 替身缺失，产物 require('electron') 可能失败）"
+fi
+
 if [ "$SHIM_OK" = "0" ]; then
   echo "ERROR: 关键 shim 缺失，无法继续。"
   exit 1
@@ -273,6 +287,17 @@ if [ -d "$SRC/node_modules" ]; then
   echo "依赖 → $OUT/node_modules ($(du -sh "$OUT/node_modules" 2>/dev/null | cut -f1))"
 else
   echo "WARN: 未找到 node_modules"
+fi
+
+# 在上面的 prune + 复制之后，把运行期 electron 替身落进 node_modules。
+# 必须在 prune 之后，否则会被 npm prune --omit=dev 当作未声明依赖清掉。
+if [ "$SHIM_ELECTRON_OK" = "1" ]; then
+  mkdir -p "$OUT/node_modules/electron"
+  cp "$ELECTRON_CJS_SRC" "$OUT/node_modules/electron/index.js"
+  cp "$ELECTRON_PKG_SRC" "$OUT/node_modules/electron/package.json"
+  echo "✓ electron 运行期替身 → $OUT/node_modules/electron/（index.js + package.json）"
+else
+  echo "⚠ 跳过 electron 运行期替身落位：源文件缺失，require('electron') 将失败"
 fi
 
 # ---------- 7. core/index.js 适配器骨架 ----------
