@@ -100,7 +100,9 @@ jobs:
               continue
             fi
             REASON="version changed"
-            [[ "$FORCE_THIS" == "true" ]] && REASON="forced"
+            # 注意：不能写成 `[[ ... ]] && VAR=...`。在 `set -e` 下，左侧条件为假时
+            # 整条 AND 列表返回非零，shell 会直接终止脚本（静默失败、无 job 报错行）。
+            if [[ "$FORCE_THIS" == "true" ]]; then REASON="forced"; fi
             echo "::notice::$APP publishing ($REASON): $PREV -> $CUR"
 
             # 从当前源码重建 fpk
@@ -125,7 +127,8 @@ jobs:
           # 为版本变更创建 GitHub Release（tag 已存在则复用），并将 download_url
           # 统一改写为该版本「固定」的 Release 资产链接（可回滚、不随分支漂移）。
           for R in "${RELEASES[@]:-}"; do
-            [[ -z "$R" ]] && continue
+            # 同上：短路写法在 $R 非空时会导致 set -e 终止脚本。
+            if [[ -z "$R" ]]; then continue; fi
             IFS='|' read -r APP VER CL FPK <<< "$R"
             TAG="v${APP}-${VER}"
             REL_URL="https://github.com/$REPO/releases/download/$TAG/${APP}_all.fpk"
