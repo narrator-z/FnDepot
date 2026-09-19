@@ -1,0 +1,9 @@
+[
+  {
+    "stepTitle": "运行状态",
+    "items": [
+      { "type": "tips", "helpText": "服务端口：19999。登录态目录：/var/apps/loomyproxy/target/docker/data/loomy-profile" },
+      { "type": "tips", "helpText": "若 /v1/models 返回空数组，说明登录态缺失或已过期，请重新在有界面的电脑上登录并拷贝 loomy-profile，然后重启应用。" }
+    ]
+  }
+]

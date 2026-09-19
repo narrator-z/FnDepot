@@ -1,0 +1,13 @@
+{
+  ".url": {
+    "loomyproxy.Application": {
+      "title": "Loomy Proxy",
+      "icon": "images/icon_{0}.png",
+      "type": "url",
+      "protocol": "",
+      "port": "19999",
+      "url": "/v1/models",
+      "allUsers": false
+    }
+  }
+}

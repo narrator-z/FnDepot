@@ -1,0 +1,28 @@
+version: '3.3'
+services:
+  loomyproxy:
+    container_name: loomyproxy
+    hostname: loomyproxy
+    restart: always
+    # 镜像由 .github/workflows/build-loomyproxy.yml 构建并推送到 GHCR（多架构 amd64/arm64）
+    image: ghcr.io/narrator-z/loomyproxy:latest
+    ports:
+      # TRIM_SERVICE_PORT 即 manifest 里的 service_port（19999）
+      - '${TRIM_SERVICE_PORT}:19999'
+    volumes:
+      # 登录态（Chromium user-data-dir，含 HttpOnly 会话 Cookie）
+      # 相对路径相对本 compose 文件所在目录，即 ${TRIM_APPDEST}/docker/data/loomy-profile
+      - './data/loomy-profile:/data/loomy-profile'
+    environment:
+      # 无头运行：飞牛无图形会话，Chromium 必须 headless
+      - 'LOOMY_HEADLESS=1'
+      # 容器内以 root 运行 Chromium，必须关闭沙箱
+      - 'LOOMY_NO_SANDBOX=1'
+      - 'LOOMY_PROFILE_DIR=/data/loomy-profile'
+      # 监听 0.0.0.0，端口映射才能把请求送进容器
+      - 'PROXY_HOST=0.0.0.0'
+      - 'PROXY_PORT=19999'
+      - 'CDP_PORT=9222'
+      - 'TZ=Asia/Shanghai'
+    # headless Chromium 常驻约 300~600MB，留 1G 上限保护 NAS 宿主
+    mem_limit: 1g

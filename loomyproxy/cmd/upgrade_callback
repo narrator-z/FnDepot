@@ -1,0 +1,12 @@
+#!/bin/bash
+# 升级后：若登录态目录被清空则从备份恢复
+SRC="${TRIM_APPDEST}/docker/data/loomy-profile"
+BAK="/tmp/loomyproxy-profile-backup"
+
+mkdir -p "$SRC"
+chmod 700 "$SRC"
+if [ -d "$BAK" ] && [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
+  cp -a "$BAK/." "$SRC/" 2>/dev/null || true
+  echo "[loomyproxy] 已从备份恢复登录态"
+fi
+exit 0

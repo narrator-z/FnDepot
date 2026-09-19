@@ -1,0 +1,12 @@
+#!/bin/bash
+# 卸载前：把登录态备份到 /tmp，便于用户误删后找回
+SRC="${TRIM_APPDEST}/docker/data/loomy-profile"
+BAK="/tmp/loomyproxy-profile-uninstall-backup"
+
+if [ -d "$SRC" ] && [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
+  rm -rf "$BAK"
+  mkdir -p "$BAK"
+  cp -a "$SRC/." "$BAK/" 2>/dev/null || true
+  echo "[loomyproxy] 登录态已备份到 $BAK（卸载后如需恢复可从此目录取回）"
+fi
+exit 0

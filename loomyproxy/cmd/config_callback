@@ -1,0 +1,10 @@
+#!/bin/bash
+# 配置变更后：校验登录态是否仍在，提示重启方式
+PROFILE_DIR="${TRIM_APPDEST}/docker/data/loomy-profile"
+
+if [ -z "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then
+  echo "[loomyproxy] 警告：登录态目录为空（$PROFILE_DIR）。请在有界面的电脑上运行 login.js 生成 loomy-profile 后拷贝进来，否则 /v1/models 会返回空列表。"
+else
+  echo "[loomyproxy] 登录态目录正常: $PROFILE_DIR"
+fi
+exit 0

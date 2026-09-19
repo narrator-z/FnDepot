@@ -1,0 +1,4 @@
+#!/bin/bash
+# 配置变更前：仅提示
+echo "[loomyproxy] 应用配置即将变更"
+exit 0

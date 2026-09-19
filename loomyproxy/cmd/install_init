@@ -1,0 +1,5 @@
+#!/bin/bash
+# 安装前：仅做环境提示，不阻断安装
+echo "[loomyproxy] 准备安装 Loomy Proxy（Docker 应用）"
+echo "[loomyproxy] 需要设备可拉取 ghcr.io/narrator-z/loomyproxy 镜像，并具备外网访问能力（需连 loomy.xunfei.cn）"
+exit 0

@@ -1,0 +1,12 @@
+#!/bin/bash
+# 升级前：备份登录态，避免解包覆盖应用目录时丢失
+SRC="${TRIM_APPDEST}/docker/data/loomy-profile"
+BAK="/tmp/loomyproxy-profile-backup"
+
+if [ -d "$SRC" ] && [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
+  rm -rf "$BAK"
+  mkdir -p "$BAK"
+  cp -a "$SRC/." "$BAK/" 2>/dev/null || true
+  echo "[loomyproxy] 已备份登录态到 $BAK"
+fi
+exit 0

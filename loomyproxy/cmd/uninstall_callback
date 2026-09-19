@@ -1,0 +1,4 @@
+#!/bin/bash
+# 卸载后：仅做收尾提示，备份已由 uninstall_init 放到 /tmp
+echo "[loomyproxy] 已卸载。登录态备份（如有）位于 /tmp/loomyproxy-profile-uninstall-backup，重启设备后会被清空。"
+exit 0

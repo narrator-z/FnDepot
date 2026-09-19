@@ -1,0 +1,8 @@
+[
+  {
+    "stepTitle": "卸载说明",
+    "items": [
+      { "type": "tips", "helpText": "卸载会移除应用文件；登录态会在卸载前自动备份到 /tmp/loomyproxy-profile-uninstall-backup（设备重启后会被清空）。" }
+    ]
+  }
+]

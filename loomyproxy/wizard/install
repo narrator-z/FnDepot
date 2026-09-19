@@ -1,0 +1,24 @@
+[
+  {
+    "stepTitle": "登录态准备（必读）",
+    "items": [
+      { "type": "tips", "helpText": "本应用靠持久化浏览器会话持有 Loomy 的 HttpOnly 登录 Cookie。飞牛没有图形界面，无法在设备上扫码登录，所以登录态必须先在有界面的电脑上生成，再拷贝到本应用。" },
+      { "type": "tips", "helpText": "① 在 Windows / Mac / 带桌面的 Linux 上执行 node login.js，弹出浏览器后扫码或验证码登录，关窗即保存；② 把生成的 loomy-profile 目录内的【全部内容】拷贝到飞牛的 /var/apps/loomyproxy/target/docker/data/loomy-profile/；③ 回到应用中心重启本应用。" },
+      { "type": "tips", "helpText": "不放登录态也能装，但 /v1/models 会返回空数组，调用会 401。" }
+    ]
+  },
+  {
+    "stepTitle": "访问与验证",
+    "items": [
+      { "type": "tips", "helpText": "OpenAI 兼容端口：19999。模型列表 GET /v1/models；对话 POST /v1/chat/completions，模型名可用 loomy/<模型ID> 或直接 <模型ID>。" },
+      { "type": "tips", "helpText": "验证：curl http://<飞牛IP>:19999/v1/models，返回非空 data 数组即登录态有效。" }
+    ]
+  },
+  {
+    "stepTitle": "注意事项",
+    "items": [
+      { "type": "tips", "helpText": "⚠️ 登录态会过期：401 或 /v1/models 变空时，需重新在有界面的电脑上登录并再次拷贝 loomy-profile。" },
+      { "type": "tips", "helpText": "⚠️ 容器需联网访问 loomy.xunfei.cn；镜像含 Chromium，首次拉取较大；常驻内存约 300~600MB，已设 1G 上限。" }
+    ]
+  }
+]

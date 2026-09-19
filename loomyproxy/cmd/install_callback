@@ -1,0 +1,18 @@
+#!/bin/bash
+# 安装后：准备登录态目录并提示迁移步骤
+# 注意：只有 install_callback 阶段，框架提供的环境变量目录才已生成
+PROFILE_DIR="${TRIM_APPDEST}/docker/data/loomy-profile"
+
+mkdir -p "$PROFILE_DIR"
+chmod 700 "$PROFILE_DIR"
+echo "[loomyproxy] 登录态目录已就绪: $PROFILE_DIR"
+
+if [ -n "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then
+  echo "[loomyproxy] 已检测到登录态内容，可直接启动。"
+else
+  echo "[loomyproxy] 尚未放入登录态。请在【有界面的电脑】上执行："
+  echo "[loomyproxy]   1) node login.js           （弹出浏览器，扫码/验证码登录 Loomy）"
+  echo "[loomyproxy]   2) 把生成的 loomy-profile 目录内的【全部内容】拷贝到上面的登录态目录"
+  echo "[loomyproxy]   3) 重启本应用，访问 http://<飞牛IP>:19999/v1/models 确认返回非空模型列表"
+fi
+exit 0
