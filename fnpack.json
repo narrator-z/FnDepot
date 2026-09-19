@@ -43,5 +43,20 @@
     "size": "22488.54KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vchat2api-1.6.10/chat2api_all.fpk",
     "changelog": "修复 1.6.9 安装后管理界面仍白屏：入口 url /app/chat2api（无尾斜杠）+ index.html 相对资源路径 ./assets/，无尾斜杠下资源被解析到 /app/assets/（少一层），服务端 fallback 返回 HTML 而非 JS，导致白屏。现双重修复：server-entry.js 对无尾斜杠网关前缀 302 重定向到带尾斜杠；renderer 构建加 base=/app/chat2api/，资源改绝对路径。另附 1.6.8 白屏修复：electron 替身包（node_modules/electron）+ locateEntry() 抛真实原因。"
+  },
+  "loomyproxy": {
+    "display_name": "Loomy Proxy",
+    "platform": "all",
+    "version": "1.0.0",
+    "desc": "把 Loomy（讯飞星火 Athena）Web 版模型接成 OpenAI 兼容接口，端口 19999，任意客户端可用 loomy/模型名 调用。登录态需在有界面的电脑生成后迁移到本应用。",
+    "labels": "AI,API代理,开发工具",
+    "distributor": "narrator-z",
+    "distributor_url": "https://github.com/narrator-z/FnDepot",
+    "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
+    "install_type": "系统空间",
+    "isdocker": "true",
+    "size": "7.81KB",
+    "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vloomyproxy-1.0.0/loomyproxy_all.fpk",
+    "changelog": "1.0.0 首个版本：以 Docker 应用形态交付 Loomy Web 浏览器侧代理。镜像内置 Node 20 + Playwright Chromium（headless），容器内先起带 CDP 的持久化浏览器会话，再由 proxy.js 经 CDP 在页面内调用上游接口并转换为 OpenAI 协议。登录态（loomy-profile）挂载在应用数据目录 ./data/loomy-profile，升级不丢；因飞牛无图形会话，登录态需在有界面的电脑上用 login.js 生成后迁移。状态检查沿用仓库约定：从 docker-compose.yaml 解析 container_name 后 docker inspect。"
   }
 }
