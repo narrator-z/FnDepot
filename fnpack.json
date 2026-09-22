@@ -55,7 +55,7 @@
     "bug_report_url": "https://github.com/narrator-z/FnDepot/issues",
     "install_type": "系统空间",
     "isdocker": "true",
-    "size": "7.81KB",
+    "size": "9.05KB",
     "download_url": "https://github.com/narrator-z/FnDepot/releases/download/vloomyproxy-1.1.0/loomyproxy_all.fpk",
     "changelog": "1.1.0 性能与稳定性修复：①真流式（1.0.x 流式实现是未完成的死代码，实际等上游整段生成完再回放，首字延迟=完整生成耗时），改为页内边读边写入独立缓冲、Node 侧 80ms 轮询增量即时回写；②并发控制在途上限（默认 2）+ 单请求 120s 超时 + 客户端断开即 AbortController 中止上游；③每请求独立 reqId 作页面侧缓冲 key，消除多请求共用缓冲导致的响应串扰；④/v1/models 加 300s 缓存；⑤新增结构化访问日志与 docker 日志轮转（10MB×3），此前 24 小时零日志完全不可观测；⑥内存上限 1G→1.5G（实测常驻 650MB、峰值 681MB，1G 仅剩 33% 余量，易 OOMKill 中断在途请求）；⑦新增健康检查；⑧新增向导开关「渲染减负」（默认 0 关闭），置 1 可把空闲常驻 CPU 由 25~60% 降到 5% 以下、磁盘写入基本归零，异常时改回 0 即可。 1.0.0 首个版本：以 Docker 应用形态交付 Loomy Web 浏览器侧代理。镜像内置 Node 20 + Playwright Chromium（headless），容器内先起带 CDP 的持久化浏览器会话，再由 proxy.js 经 CDP 在页面内调用上游接口并转换为 OpenAI 协议。登录态（loomy-profile）挂载在应用数据目录 ./data/loomy-profile，升级不丢；因飞牛无图形会话，登录态需在有界面的电脑上用 login.js 生成后迁移。状态检查沿用仓库约定：从 docker-compose.yaml 解析 container_name 后 docker inspect。"
   }
