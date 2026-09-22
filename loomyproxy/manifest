@@ -1,5 +1,5 @@
 appname               = loomyproxy
-version               = 1.0.0
+version               = 1.1.0
 display_name          = Loomy Proxy
 desc                  = 把 Loomy（讯飞星火 Athena）Web 版模型接成 OpenAI 兼容接口，任意客户端可用 loomy/模型名 调用。<br>• OpenAI API 端口：19999（/v1/models、/v1/chat/completions）<br>• 原理：容器内持久化浏览器会话持有登录态，通过 CDP 在页面内转发请求，HttpOnly Cookie 不出浏览器<br>• 登录态需在有界面的电脑上生成后迁移到本应用（详见安装向导与 README）
 source                = thirdparty
@@ -18,4 +18,4 @@ checkport             = true
 disable_authorization_path = false
 desktop_uidir         = ui
 desktop_applaunchname = loomyproxy.Application
-changelog             = 1.0.0 首个版本：以 Docker 应用形态交付 Loomy Web 浏览器侧代理。镜像内置 Node 20 + Playwright Chromium（headless），容器内先起带 CDP 的持久化浏览器会话，再由 proxy.js 经 CDP 在页面内调用 /web/api/chat/completions 并转换为 OpenAI 协议。登录态（loomy-profile）挂载在应用数据目录 ./data/loomy-profile，升级不丢；因飞牛无图形会话，登录态需在有界面的电脑上用 login.js 生成后迁移（方案 A）。状态检查沿用仓库约定：从 docker-compose.yaml 解析 container_name 后 docker inspect。
+changelog             = 1.1.0 性能与稳定性修复。①真流式：1.0.x 的流式实现是未完成的死代码（内部直接返回 null），实际是等上游整段生成完再一次性回放，首字延迟等于完整生成耗时；现改为页内边读边写入独立缓冲、Node 侧按 80ms 拉取增量即时回写。②并发控制：新增在途上限（默认 2，环境变量 LOOMY_MAX_IN_FLIGHT 可调）、单请求 120s 超时、客户端断开即用 AbortController 中止上游，避免继续消耗额度。③每请求独立 reqId 作为页面侧缓冲 key，彻底消除多请求共用全局缓冲导致的响应串扰。④/v1/models 加 300s 缓存，减少浏览器往返。⑤新增结构化访问日志（时间|方法|路径|模型|状态码|耗时|字节）与 docker 日志轮转（10MB×3），此前容器 24 小时零日志、完全不可观测。⑥内存上限 1G→1.5G：实测常驻 650MB、峰值 681MB，1G 只剩 33% 余量，大上下文对话易触发 OOMKill 中断在途请求。⑦新增健康检查（每 60s 探 /v1/models）。⑧新增向导开关「渲染减负」（默认 0 关闭）：置 1 后禁用软件 GPU 与光栅化，实测空闲常驻 CPU 可由 25~60%（单核口径）降到 5% 以下、磁盘写入基本归零；若页面依赖 WebGL/Canvas 导致异常，改回 0 重启即可，不影响登录态。 1.0.0 首个版本：以 Docker 应用形态交付 Loomy Web 浏览器侧代理。镜像内置 Node 20 + Playwright Chromium（headless），容器内先起带 CDP 的持久化浏览器会话，再由 proxy.js 经 CDP 在页面内调用 /web/api/chat/completions 并转换为 OpenAI 协议。登录态（loomy-profile）挂载在应用数据目录 ./data/loomy-profile，升级不丢；因飞牛无图形会话，登录态需在有界面的电脑上用 login.js 生成后迁移（方案 A）。状态检查沿用仓库约定：从 docker-compose.yaml 解析 container_name 后 docker inspect。

@@ -15,10 +15,27 @@
     ]
   },
   {
+    "stepTitle": "性能与资源",
+    "items": [
+      {
+        "type": "text",
+        "field": "loomy_disable_gpu",
+        "label": "渲染减负开关",
+        "initValue": "0",
+        "helpText": "填 0（默认）：保持原行为，容器内用软件渲染，空闲时浏览器仍常驻约 25~60% 的单核 CPU，并持续产生缓存写入。填 1：禁用软件 GPU 与光栅化，实测空闲常驻 CPU 可降到 5% 以下、磁盘写入基本归零。若开启后发现 /v1/models 或对话异常（页面依赖 WebGL/Canvas 时可能出现），在应用设置里改回 0 重启即可，不影响登录态。",
+        "rules": [
+          { "required": true, "message": "请输入 0 或 1" },
+          { "pattern": "^(0|1)$", "message": "只能填 0（关闭）或 1（开启）" }
+        ]
+      },
+      { "type": "tips", "helpText": "不确定就先填 0，等稳定运行后在应用设置里改成 1 观察一段时间。" }
+    ]
+  },
+  {
     "stepTitle": "注意事项",
     "items": [
       { "type": "tips", "helpText": "⚠️ 登录态会过期：401 或 /v1/models 变空时，需重新在有界面的电脑上登录并再次拷贝 loomy-profile。" },
-      { "type": "tips", "helpText": "⚠️ 容器需联网访问 loomy.xunfei.cn；镜像含 Chromium，首次拉取较大；常驻内存约 300~600MB，已设 1G 上限。" }
+      { "type": "tips", "helpText": "⚠️ 容器需联网访问 loomy.xunfei.cn；镜像含 Chromium，首次拉取较大；常驻内存实测约 650MB，已设 1.5G 上限。" }
     ]
   }
 ]

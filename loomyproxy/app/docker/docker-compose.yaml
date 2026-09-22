@@ -24,5 +24,24 @@ services:
       - 'PROXY_PORT=19999'
       - 'CDP_PORT=9222'
       - 'TZ=Asia/Shanghai'
-    # headless Chromium 常驻约 300~600MB，留 1G 上限保护 NAS 宿主
-    mem_limit: 1g
+      # 渲染减负开关（来自安装/升级向导，默认 0 = 关闭，行为与 1.0.x 完全一致）：
+      # 置 1 后禁用软件 GPU / 光栅化 / 2D 加速画布，实测可把空闲常驻 CPU 从 25~60%（单核口径）
+      # 压到 5% 以下，并消除 SwiftShader 着色器缓存的磁盘写放大。
+      # 风险：若 Loomy 页面依赖 WebGL/Canvas，置 1 后可能出现界面异常，届时改回 0 即可。
+      - 'LOOMY_DISABLE_GPU=${loomy_disable_gpu:-0}'
+    # headless Chromium 实测常驻约 650MB、峰值 681MB，1G 上限只剩 33% 余量，
+    # 一次大上下文对话就可能打满触发 OOMKill（会中断在途请求），故放宽到 1.5G。
+    mem_limit: 1536m
+    # 1.1.0 起每个请求打一行访问日志，这里配套轮转，避免日志无限增长
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    healthcheck:
+      # 镜像内已装 curl；/v1/models 会真正走一次浏览器会话，能反映登录态与代理可用性
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:19999/v1/models"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 90s
