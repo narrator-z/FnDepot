@@ -1,12 +1,63 @@
 #!/bin/bash
-# 升级前：备份登录态，避免解包覆盖应用目录时丢失
-SRC="${TRIM_APPDEST}/docker/data/loomy-profile"
-BAK="/tmp/loomyproxy-profile-backup"
+# 升级前：备份登录态（Chromium user-data-dir，含 HttpOnly 会话 Cookie）
+#
+# 1.1.1 修复「升级后认证丢失」。依据官方文档 core-concepts/environment-variables：
+#   TRIM_APPDEST = 已安装的 target 目录（会被升级包替换）
+#   TRIM_PKGVAR  = 运行时数据目录
+#   TRIM_TEMP_UPGRADE_FOLDER = 升级过程临时目录
+# 1.1.0 的问题：备份源死写 TRIM_APPDEST 之下（恰是升级时最易被替换的位置），
+#   且备份固定落在易失的 /tmp，临时目录一清便无物可恢复。
+# 现改为：① 以 docker inspect 反查真实挂载源（权威），逐级兜底到官方变量；
+#        ② 备份默认落持久数据区同级，最后才退化到官方升级临时目录。
+set -u
 
-if [ -d "$SRC" ] && [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
-  rm -rf "$BAK"
-  mkdir -p "$BAK"
-  cp -a "$SRC/." "$BAK/" 2>/dev/null || true
-  echo "[loomyproxy] 已备份登录态到 $BAK"
+DOCKER="$(command -v docker 2>/dev/null || true)"
+[ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
+[ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
+
+# 1) 反查真实挂载源（最权威）：容器把 /data/loomy-profile 挂到了哪个宿主机路径
+SRC=""
+if [ -n "$DOCKER" ]; then
+  SRC="$($DOCKER inspect loomyproxy --format '{{range .Mounts}}{{if eq .Destination "/data/loomy-profile"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)"
+fi
+
+# 2) 逐级兜底：官方变量优先（运行时数据目录 -> 安装目录 -> 当前目录），
+#    最后才是仓库惯例的 @appcenter 候选（与 moviepilot 一致，覆盖变量缺失/历史安装）
+if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
+  CANDS=""
+  [ -n "${TRIM_PKGVAR:-}" ] && CANDS="$CANDS ${TRIM_PKGVAR}/loomy-profile"
+  [ -n "${TRIM_APPDEST:-}" ] && CANDS="$CANDS ${TRIM_APPDEST}/docker/data/loomy-profile"
+  CANDS="$CANDS $PWD/docker/data/loomy-profile"
+  for v in 1 2 3 4; do
+    CANDS="$CANDS /vol${v}/@appcenter/loomyproxy/docker/data/loomy-profile"
+  done
+  for C in $CANDS; do
+    [ -d "$C" ] && SRC="$C" && break
+  done
+fi
+
+if [ -z "$SRC" ] || [ ! -d "$SRC" ] || [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
+  echo "[loomyproxy] 未找到有效登录态目录，跳过备份（升级后需重新迁移 loomy-profile）"
+  exit 0
+fi
+
+# 3) 备份落点：优先持久数据区同级（由 SRC 反推，去掉 /docker/data/loomy-profile），
+#    即使升级期间重启也不丢；推导不出时才退到官方升级临时目录 / /tmp。
+#    SRC=/vol1/@appcenter/loomyproxy/docker/data/loomy-profile -> /vol1/@appcenter/loomyproxy/loomyproxy-profile-backup
+ROOT="$(dirname "$(dirname "$(dirname "$SRC")")")"
+if [ -d "$ROOT" ]; then
+  BAK="${LOOMY_PROFILE_BAK:-$ROOT/loomyproxy-profile-backup}"
+else
+  BAK="${LOOMY_PROFILE_BAK:-${TRIM_TEMP_UPGRADE_FOLDER:-/tmp}/loomyproxy-profile-backup}"
+fi
+
+rm -rf "$BAK"
+mkdir -p "$BAK"
+cp -a "$SRC/." "$BAK/" 2>/dev/null || true
+
+if [ -n "$(ls -A "$BAK" 2>/dev/null)" ]; then
+  echo "[loomyproxy] 已备份登录态 ($SRC) 到 $BAK"
+else
+  echo "[loomyproxy] 警告：备份写入失败，升级后可能丢失登录态！请提前手动迁移 loomy-profile"
 fi
 exit 0

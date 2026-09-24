@@ -1,12 +1,67 @@
 #!/bin/bash
-# 升级后：若登录态目录被清空则从备份恢复
-SRC="${TRIM_APPDEST}/docker/data/loomy-profile"
-BAK="/tmp/loomyproxy-profile-backup"
+# 升级后：若登录态目录被清空/不存在，则从备份恢复
+# 与 upgrade_init 配套：同样以 docker inspect 反查真实挂载源、逐级兜底到官方变量，
+# 备份落点解析规则必须与其保持一致，否则restore只会读到空目录。
+set -u
+
+DOCKER="$(command -v docker 2>/dev/null || true)"
+[ -z "$DOCKER" ] && [ -x /usr/bin/docker ] && DOCKER=/usr/bin/docker
+[ -z "$DOCKER" ] && [ -x /bin/docker ] && DOCKER=/bin/docker
+
+# 1) 反查真实挂载源
+SRC=""
+if [ -n "$DOCKER" ]; then
+  SRC="$($DOCKER inspect loomyproxy --format '{{range .Mounts}}{{if eq .Destination "/data/loomy-profile"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)"
+fi
+if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
+  CANDS=""
+  [ -n "${TRIM_PKGVAR:-}" ] && CANDS="$CANDS ${TRIM_PKGVAR}/loomy-profile"
+  [ -n "${TRIM_APPDEST:-}" ] && CANDS="$CANDS ${TRIM_APPDEST}/docker/data/loomy-profile"
+  CANDS="$CANDS $PWD/docker/data/loomy-profile"
+  for v in 1 2 3 4; do
+    CANDS="$CANDS /vol${v}/@appcenter/loomyproxy/docker/data/loomy-profile"
+  done
+  for C in $CANDS; do
+    [ -d "$C" ] && SRC="$C" && break
+  done
+fi
+if [ -z "$SRC" ]; then
+  if [ -n "${TRIM_APPDEST:-}" ]; then
+    SRC="${TRIM_APPDEST}/docker/data/loomy-profile"
+  elif [ -n "${TRIM_PKGVAR:-}" ]; then
+    SRC="${TRIM_PKGVAR}/loomy-profile"
+  else
+    SRC="$PWD/docker/data/loomy-profile"
+  fi
+fi
+
+# 2) 备份落点（与 upgrade_init 一致）
+if [ -n "$SRC" ]; then
+  ROOT="$(dirname "$(dirname "$(dirname "$SRC")")")"
+  if [ -d "$ROOT" ]; then
+    BAK="${LOOMY_PROFILE_BAK:-$ROOT/loomyproxy-profile-backup}"
+  else
+    BAK="${LOOMY_PROFILE_BAK:-${TRIM_TEMP_UPGRADE_FOLDER:-/tmp}/loomyproxy-profile-backup}"
+  fi
+else
+  BAK="${LOOMY_PROFILE_BAK:-${TRIM_TEMP_UPGRADE_FOLDER:-/tmp}/loomyproxy-profile-backup}"
+fi
 
 mkdir -p "$SRC"
 chmod 700 "$SRC"
-if [ -d "$BAK" ] && [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
-  cp -a "$BAK/." "$SRC/" 2>/dev/null || true
-  echo "[loomyproxy] 已从备份恢复登录态"
+
+if [ -d "$BAK" ] && [ -n "$(ls -A "$BAK" 2>/dev/null)" ]; then
+  if [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
+    cp -a "$BAK/." "$SRC/" 2>/dev/null || true
+    if [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
+      echo "[loomyproxy] 已从备份恢复登录态 ($BAK -> $SRC)"
+    else
+      echo "[loomyproxy] 恢复失败，请手动重新迁移 loomy-profile"
+    fi
+  else
+    echo "[loomyproxy] 目标目录已有登录态，跳过恢复"
+  fi
+else
+  echo "[loomyproxy] 未发现备份：若登录态丢失，请重新迁移 loomy-profile"
 fi
 exit 0
