@@ -23,4 +23,4 @@ services:
       - 'SUPERUSER=${moviepilot_admin_username}'
       - 'MP_ADMIN_PASSWORD=${moviepilot_admin_password}'
     restart: always
-    image: ghcr.io/narrator-z/moviepilot:latest
+    image: narrator-z/moviepilot:latest
